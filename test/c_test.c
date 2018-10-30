@@ -1,8 +1,6 @@
 #include <czmq.h>
 
-#include "zwssock.h"
-
-#define ZMQ_STATIC
+#include "zwssock/zwssock.h"
 
 static char *listen_on = "tcp://127.0.0.1:8000";
 

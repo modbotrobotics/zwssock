@@ -1,5 +1,5 @@
-#ifndef __ZWSHANDSHAKE_H_INCLUDED__
-#define __ZWSHANDSHAKE_H_INCLUDED__
+#ifndef ZWSHANDSHAKE_H_
+#define ZWSHANDSHAKE_H_
 
 #include <czmq.h>
 
@@ -21,4 +21,4 @@ extern "C" {
 }
 #endif
 
-#endif
+#endif  // ZWSHANDSHAKE_H_

@@ -1,5 +1,5 @@
-#ifndef __ZWSDECODER_H_INCLUDED__
-#define __ZWSDECODER_H_INCLUDED__
+#ifndef ZWSDECODER_H_
+#define ZWSDECODER_H_
 
 #include <czmq.h>
 
@@ -26,4 +26,4 @@ extern "C" {
 }
 #endif
 
-#endif
+#endif  // ZWSDECODER_H_

@@ -1,5 +1,5 @@
-#ifndef __ZWSSOCK_H_INCLUDED__
-#define __ZWSSOCK_H_INCLUDED__
+#ifndef ZWSSOCK_H_
+#define ZWSSOCK_H_
 #define LIBCZMQ_EXPORTS
 
 #include <czmq.h>
@@ -27,4 +27,4 @@ CZMQ_EXPORT void* zwssock_handle(zwssock_t *self);
 }
 #endif
 
-#endif
+#endif  // ZWSSOCK_H_

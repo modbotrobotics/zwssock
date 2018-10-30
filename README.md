@@ -1,7 +1,12 @@
-ZWSSock - ZeroMQ over WebSocket library
-=======================================
+# ZWSSock - ZeroMQ over WebSocket library
+
+Forked from [zeromq/zwssock](https://github.com/zeromq/zwssock).
+
+
+## ZWSSock
 
 ZWSSock implements [ZWS (ZeroMQ WebSocket)](http://rfc.zeromq.org/spec:39) for use in ZeroMQ applications. Additionally it supports [Compression Extensions for WebSocket](https://tools.ietf.org/html/draft-ietf-hybi-permessage-compression-28) for per message deflate.
+
 
 ZWS and ZWSSock are both in early stage and the protocol is not yet finalized nor is this library.
 The API of ZWSSock is very similar to the API of zsock of CZMQ v3.0, so using it should be very simple.
@@ -14,15 +19,14 @@ Please note that when using WebSocket it is recommended to do it over SSL becaus
 
 ZWSSock currently implements the router pattern. Publisher pattern is next to come (JSMQ implements subscriber and dealer).
 
-To use the ZWSSock take a look at [main.c](https://github.com/somdoron/zwssock/blob/master/src/CZMQ-ZWSSock/main.c) file. 
-The project also includes [browser side example](https://github.com/somdoron/zwssock/blob/master/src/CZMQ-ZWSSock/Example.html).
 
-On Linux please review src/CZMQ-ZWSSock/Makefile - CFLAGS and LIBS assume an installation of pkg-config. The code is tested with ØMQ=4.0.4 czmq=2.2.0. To build:
+## Usage
 
-    cd src/CZMQ-ZWSSock
-    make
+To include the library in your project, use the prebuilt conan package or recipe, or clone this repository and build from source.
 
-This  creates the 'zwstest' program in the same directory. By default `zwstest` will listen on 127.0.0.1:8000.
-Pass a different listen socket as single argument:
 
-     ./zwstest tcp://0.0.0.0:1234
+### Examples
+
+To use the ZWSSock library take a look at [test/c_test.c](https://github.com/modbotrobotics/zwssock/blob/master/test/c_test.c) file. 
+The project also includes [browser side example](https://github.com/modbotrobotics/zwssock/blob/master/test/example.html).
+
