@@ -15,13 +15,13 @@ CZMQ_EXPORT zwssock_t* zwssock_new_router();
 
 CZMQ_EXPORT void zwssock_destroy(zwssock_t **self_p);
 
-CZMQ_EXPORT int zwssock_bind(zwssock_t *self, char *endpoint);
+CZMQ_EXPORT int zwssock_bind(zwssock_t *self, const char *endpoint);
 
 CZMQ_EXPORT int zwssock_send(zwssock_t *self, zmsg_t **msg_p);
 
 CZMQ_EXPORT zmsg_t * zwssock_recv(zwssock_t *self);
 
-CZMQ_EXPORT void* zwssock_handle(zwssock_t *self);
+CZMQ_EXPORT zsock_t* zwssock_handle(zwssock_t *self);
 
 #ifdef __cplusplus
 }

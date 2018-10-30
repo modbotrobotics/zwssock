@@ -8,8 +8,8 @@
 
 struct _zwssock_t
 {
-	zactor_t *control_actor;              //  Control to/from agent
-	zsock_t *data;                 //  Data to/from agent
+	zactor_t *control_actor;              										//  Control to / from agent
+	zsock_t *data;                 														//  Data to / from agent
 };
 
 //  This background thread does all the real work
@@ -54,7 +54,7 @@ void zwssock_destroy(zwssock_t **self_p)
 	}
 }
 
-int zwssock_bind(zwssock_t *self, char *endpoint)
+int zwssock_bind(zwssock_t *self, const char *endpoint)
 {
 	assert(self);
 	return zstr_sendx(self->control_actor, "BIND", endpoint, NULL);
@@ -75,7 +75,7 @@ zmsg_t * zwssock_recv(zwssock_t *self)
 	return msg;
 }
 
-void* zwssock_handle(zwssock_t *self)
+zsock_t* zwssock_handle(zwssock_t *self)
 {
 	assert(self);
 	return self->data;
@@ -419,6 +419,7 @@ s_agent_handle_control(agent_t *self)
 		puts(endpoint);
 		int rc = zsock_bind(self->stream, "%s", endpoint);
 		assert(rc != -1);
+		puts(zsock_endpoint(self->stream));
 		free(endpoint);
 	}
 	else if (streq(command, "UNBIND")) {
