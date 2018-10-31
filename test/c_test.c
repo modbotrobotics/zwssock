@@ -2,13 +2,13 @@
 
 #include "zwssock/zwssock.h"
 
-static char *listen_on = "tcp://0.0.0.0:15798";
+static char* listen_on = "tcp://0.0.0.0:15798";
 
-int main(int argc, char **argv)
+int main(int argc, char** argv)
 {
-	zwssock_t *sock;
+	zwssock_t* sock;
 
-	char *l =  argc > 1 ? argv[1] : listen_on;
+	char* l =  argc > 1 ? argv[1] : listen_on;
 
 	int major, minor, patch;
 	zsys_version (&major, &minor, &patch);
@@ -22,7 +22,7 @@ int main(int argc, char **argv)
 	zwssock_bind(sock, l);
 
 	zmsg_t* msg;
-	zframe_t *id;
+	zframe_t* id;
 
 	while (!zsys_interrupted)
 	{
@@ -34,7 +34,7 @@ int main(int argc, char **argv)
 		// first message is the routing id
 		id = zmsg_pop(msg);
 
-		char * str = zmsg_popstr(msg);
+		char* str = zmsg_popstr(msg);
 		int mint = zmsg_pop(msg);
 		printf("Received: \"%s\", %u\n", str, mint);
 		free(str);

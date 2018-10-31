@@ -3,8 +3,7 @@
 
 #include "zwshandshake.h"
 
-typedef enum
-{
+typedef enum {
 	initial = 0,
 	request_line_G,
 	request_line_GE,
@@ -33,16 +32,14 @@ typedef enum
 	error = -1
 } state_t;
 
-struct _zwshandshake_t
-{
+struct _zwshandshake_t {
 	state_t state;
 	zhash_t* header_fields;
 };
 
-bool zwshandshake_validate(zwshandshake_t *self);
+bool zwshandshake_validate(zwshandshake_t* self);
 
-zwshandshake_t* zwshandshake_new()
-{
+zwshandshake_t* zwshandshake_new() {
 	zwshandshake_t* self = zmalloc(sizeof(zwshandshake_t));
 	self->state = initial;
 	self->header_fields = zhash_new();
@@ -50,14 +47,12 @@ zwshandshake_t* zwshandshake_new()
 	return self;
 }
 
-void s_free_item(void *data)
-{
+void s_free_item(void* data) {
 	free(data);
 }
 
-void zwshandshake_destroy(zwshandshake_t **self_p)
-{
-	zwshandshake_t *self = *self_p;
+void zwshandshake_destroy(zwshandshake_t** self_p) {
+	zwshandshake_t* self = *self_p;
 
 	zhash_destroy(&self->header_fields);
 
@@ -65,19 +60,18 @@ void zwshandshake_destroy(zwshandshake_t **self_p)
 	*self_p = NULL;
 }
 
-bool zwshandshake_parse_request(zwshandshake_t *self, zframe_t* data)
-{
+bool zwshandshake_parse_request(zwshandshake_t* self, zframe_t* data) {
 	// the parse method is not fully implemented and therefore not secured.
 	// for the purpose of ZWS prototyoe only the request-line, upgrade header and Sec-WebSocket-Key are validated.
 
 	// one of the ommissions in this parser in the fact that http-header contents may be spread over multiple lines
 	// the current implementation would only keep the last line.
 
-	char *request = zframe_strdup(data);
+	char* request = zframe_strdup(data);
 	int length = strlen(request);
 
-	char *field_name;
-	char *field_value;
+	char* field_name;
+	char* field_value;
 
 	size_t name_begin, name_length, value_begin, value_length;
 
@@ -287,14 +281,12 @@ bool zwshandshake_parse_request(zwshandshake_t *self, zframe_t* data)
 	return false;
 }
 
-bool zwshandshake_validate(zwshandshake_t *self)
-{
+bool zwshandshake_validate(zwshandshake_t* self) {
 	// TODO: validate that the request is valid
 	return true;
 }
 
-int encode_base64(const uint8_t *in, int in_len, char* out, int out_len)
-{
+int encode_base64(const uint8_t* in, int in_len, char* out, int out_len) {
 	static const uint8_t base64enc_tab[64] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
 	unsigned ii, io;
@@ -327,12 +319,11 @@ int encode_base64(const uint8_t *in, int in_len, char* out, int out_len)
 
 }
 
-zframe_t* zwshandshake_get_response(zwshandshake_t *self, unsigned char *client_max_window_bits, unsigned char *server_max_window_bits)
-{
-	const char * sec_websocket_key_name = "sec-websocket-key";
-	const char * magic_string = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
+zframe_t* zwshandshake_get_response(zwshandshake_t* self, unsigned char* client_max_window_bits, unsigned char* server_max_window_bits) {
+	const char* sec_websocket_key_name = "sec-websocket-key";
+	const char* magic_string = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 
-	char * key = zhash_lookup(self->header_fields, sec_websocket_key_name);
+	char* key = zhash_lookup(self->header_fields, sec_websocket_key_name);
 	if (key == NULL) return NULL;
 
 	int len = strlen(key) + strlen(magic_string);
@@ -343,7 +334,7 @@ zframe_t* zwshandshake_get_response(zwshandshake_t *self, unsigned char *client_
 	strcat(plain, magic_string);
 
 	zdigest_t* digest = zdigest_new();
-	zdigest_update(digest, (byte *) plain, len);
+	zdigest_update(digest, (byte* ) plain, len);
 
 	const byte* hash = zdigest_data(digest);
 
@@ -360,12 +351,12 @@ zframe_t* zwshandshake_get_response(zwshandshake_t *self, unsigned char *client_
 	// to implement a proper parsing of both HTTP Headers as sec-websocket-extensions list.
 
 	/* Implementation of permessage-deflate, client_max_window_bits and server_max_window_bits */
-	const char * sec_websocket_extensions_name = "sec-websocket-extensions";
+	const char* sec_websocket_extensions_name = "sec-websocket-extensions";
 	bool extension_permessage_deflate = false;
 	bool extension_client_max_window_bits = false;
 	bool extension_server_max_window_bits = false;
 
-	char * key_extensions = zhash_lookup(self->header_fields, sec_websocket_extensions_name);
+	char* key_extensions = zhash_lookup(self->header_fields, sec_websocket_extensions_name);
 	if (key_extensions && strstr(key_extensions, "permessage-deflate") != NULL &&
 		*client_max_window_bits > 0 && *server_max_window_bits > 0) {
 
@@ -376,7 +367,7 @@ zframe_t* zwshandshake_get_response(zwshandshake_t *self, unsigned char *client_
 			*client_max_window_bits = 15;
 		}
 
-		char *server_max_window_bits = strstr(key_extensions, "server_max_window_bits=");
+		char* server_max_window_bits = strstr(key_extensions, "server_max_window_bits=");
 		if (server_max_window_bits) {
 			extension_server_max_window_bits = true;
 
@@ -415,7 +406,7 @@ zframe_t* zwshandshake_get_response(zwshandshake_t *self, unsigned char *client_
 	                                           "Sec-WebSocket-Protocol: WSNetMQ\r\n"
 	                                           "%s\r\n", accept_key, extension);
 
-	zframe_t *zframe_response = zframe_new(response, response_len);
+	zframe_t* zframe_response = zframe_new(response, response_len);
 
 	return zframe_response;
 }

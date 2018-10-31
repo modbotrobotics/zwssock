@@ -7,11 +7,11 @@ typedef struct _zwshandshake_t zwshandshake_t;
 
 zwshandshake_t* zwshandshake_new();
 
-void zwshandshake_destroy(zwshandshake_t **self_p);
+void zwshandshake_destroy(zwshandshake_t** self_p);
 
-bool zwshandshake_parse_request(zwshandshake_t *self, zframe_t* data);
+bool zwshandshake_parse_request(zwshandshake_t* self, zframe_t* data);
 
-zframe_t* zwshandshake_get_response(zwshandshake_t *self, unsigned char *client_max_window_bits, unsigned char *server_max_window_bits);
+zframe_t* zwshandshake_get_response(zwshandshake_t* self, unsigned char* client_max_window_bits, unsigned char* server_max_window_bits);
 
 #ifdef __cplusplus
 extern "C" {

@@ -6,21 +6,19 @@
 #include <string.h>
 #include <zlib.h>
 
-struct _zwssock_t
-{
-	zactor_t *control_actor;              										//  Control to / from agent
-	zsock_t *data;                 														//  Data to / from agent
+struct _zwssock_t {
+	zactor_t* control_actor;              										//  Control to / from agent
+	zsock_t* data;                 														//  Data to / from agent
 };
 
 //  This background thread does all the real work
-static void s_agent_task(zsock_t *control, void *args);
+static void s_agent_task(zsock_t* control, void* args);
 
 //  --------------------------------------------------------------------------
 //  Constructor
 
-zwssock_t* zwssock_new_router()
-{
-	zwssock_t *self = (zwssock_t *)zmalloc(sizeof(zwssock_t));
+zwssock_t* zwssock_new_router() {
+	zwssock_t* self = (zwssock_t *)zmalloc(sizeof(zwssock_t));
 
 	assert(self);
 
@@ -39,11 +37,10 @@ zwssock_t* zwssock_new_router()
 //  --------------------------------------------------------------------------
 //  Destructor
 
-void zwssock_destroy(zwssock_t **self_p)
-{
+void zwssock_destroy(zwssock_t** self_p) {
 	assert(self_p);
 	if (*self_p) {
-		zwssock_t *self = *self_p;
+		zwssock_t* self = *self_p;
 		zactor_destroy(&self->control_actor);
 
 		zsock_destroy(&self->data);
@@ -54,29 +51,25 @@ void zwssock_destroy(zwssock_t **self_p)
 	}
 }
 
-int zwssock_bind(zwssock_t *self, const char *endpoint)
-{
+int zwssock_bind(zwssock_t* self, const char* endpoint) {
 	assert(self);
 	return zstr_sendx(self->control_actor, "BIND", endpoint, NULL);
 }
 
-int zwssock_send(zwssock_t *self, zmsg_t **msg_p)
-{
+int zwssock_send(zwssock_t* self, zmsg_t** msg_p) {
 	assert(self);
 	assert(zmsg_size(*msg_p) > 0);
 
 	return zmsg_send(msg_p, self->data);
 }
 
-zmsg_t * zwssock_recv(zwssock_t *self)
-{
+zmsg_t* zwssock_recv(zwssock_t* self) {
 	assert(self);
-	zmsg_t *msg = zmsg_recv(self->data);
+	zmsg_t* msg = zmsg_recv(self->data);
 	return msg;
 }
 
-zsock_t* zwssock_handle(zwssock_t *self)
-{
+zsock_t* zwssock_handle(zwssock_t* self) {
 	assert(self);
 	return self->data;
 }
@@ -85,22 +78,21 @@ zsock_t* zwssock_handle(zwssock_t *self)
 //  *************************    BACK END AGENT    *************************
 
 typedef struct {
-	zsock_t *control;              														// Control socket back to application
-	zsock_t *data;                 														// Data socket to application
-	zsock_t *stream;               														// Stream socket to server
-	zhash_t *clients;           															// Known clients
+	zsock_t* control;              														// Control socket back to application
+	zsock_t* data;                 														// Data socket to application
+	zsock_t* stream;               														// Stream socket to server
+	zhash_t* clients;           															// Known clients
 } agent_t;
 
 static agent_t *
-s_agent_new(zsock_t *control)
-{
-	agent_t *self = (agent_t *)zmalloc(sizeof(agent_t));
+s_agent_new(zsock_t* control) {
+	agent_t* self = (agent_t *)zmalloc(sizeof(agent_t));
 	self->control = control;
 	self->stream = zsock_new(ZMQ_STREAM);
 
 	//  Connect our data socket to caller's endpoint
 	self->data = zsock_new(ZMQ_PAIR);
-	char *endpoint = zstr_recv(self->control);
+	char* endpoint = zstr_recv(self->control);
 	int rc = zsock_connect(self->data, "%s", endpoint);
 	assert(rc != -1);
 	free(endpoint);
@@ -110,11 +102,10 @@ s_agent_new(zsock_t *control)
 }
 
 static void
-s_agent_destroy(agent_t **self_p)
-{
+s_agent_destroy(agent_t** self_p) {
 	assert(self_p);
 	if (*self_p) {
-		agent_t *self = *self_p;
+		agent_t* self = *self_p;
 		zhash_destroy(&self->clients);
 		zsock_destroy(&self->stream);
 		zsock_destroy(&self->data);
@@ -131,23 +122,22 @@ typedef enum {
 } state_t;
 
 typedef struct {
-	agent_t *agent;             //  Client's agent
+	agent_t* agent;             //  Client's agent
 	state_t state;              //  Current state
-	zframe_t *address;          //  Client address identity
-	char *hashkey;              //  Client hash key
+	zframe_t* address;          //  Client address identity
+	char* hashkey;              //  Client hash key
 	zwsdecoder_t* decoder;
 	unsigned char client_max_window_bits; // Requested compression factor by the server for the client
 	unsigned char server_max_window_bits; // Requested compression factor by the client for the server
 	z_stream permessage_deflate_client;   // The client advertised the permessage-deflate extension
 	z_stream permessage_deflate_server;   // The client advertised the permessage-deflate extension
 
-	zmsg_t *outgoing_msg;		// Currently outgoing message, if not NULL final frame was not yet arrived
+	zmsg_t* outgoing_msg;		// Currently outgoing message, if not NULL final frame was not yet arrived
 } client_t;
 
 static client_t *
-client_new(agent_t *agent, zframe_t *address)
-{
-	client_t *self = (client_t *)zmalloc(sizeof(client_t));
+client_new(agent_t* agent, zframe_t* address) {
+	client_t* self = (client_t *)zmalloc(sizeof(client_t));
 	assert(self);
 	self->agent = agent;
 	self->address = zframe_dup(address);
@@ -171,30 +161,25 @@ client_new(agent_t *agent, zframe_t *address)
 }
 
 static void
-client_destroy(client_t **self_p)
-{
+client_destroy(client_t** self_p) {
 	assert(self_p);
 	if (*self_p) {
-		client_t *self = *self_p;
+		client_t* self = *self_p;
 		zframe_destroy(&self->address);
 
-		if (self->decoder != NULL)
-		{
+		if (self->decoder != NULL) {
 			zwsdecoder_destroy(&self->decoder);
 		}
 
-		if (self->client_max_window_bits > 0)
-		{
+		if (self->client_max_window_bits > 0) {
 			inflateEnd(&self->permessage_deflate_client);
 		}
 
-		if (self->server_max_window_bits > 0)
-		{
+		if (self->server_max_window_bits > 0) {
 			deflateEnd(&self->permessage_deflate_server);
 		}
 
-		if (self->outgoing_msg != NULL)
-		{
+		if (self->outgoing_msg != NULL) {
 			zmsg_destroy(&self->outgoing_msg);
 		}
 
@@ -206,14 +191,12 @@ client_destroy(client_t **self_p)
 
 #define CHUNK 8192
 
-void router_message_received(void *tag, byte* payload, int length)
-{
-	client_t *self = (client_t *)tag;
+void router_message_received(void* tag, byte* payload, int length) {
+	client_t* self = (client_t *)tag;
 	bool more;
 
 	// Create outgoing message; lead with client ID
-	if (self->outgoing_msg == NULL)
-	{
+	if (self->outgoing_msg == NULL) {
 		self->outgoing_msg = zmsg_new();
 		zmsg_addstr(self->outgoing_msg, self->hashkey);
 	}
@@ -246,16 +229,15 @@ void router_message_received(void *tag, byte* payload, int length)
 					ret = Z_DATA_ERROR;
 					break;
 				case Z_DATA_ERROR:
-				case Z_MEM_ERROR:
-					{
+				case Z_MEM_ERROR: {
 						inflateEnd(&self->permessage_deflate_client);
 						zmsg_destroy(&self->outgoing_msg);
 
 						/* close the client connection */
 						self->state = exception;
-						zframe_t *address = zframe_dup(self->address);
+						zframe_t* address = zframe_dup(self->address);
 						zframe_send(&address, self->agent->stream, ZFRAME_MORE);
-						zframe_t *empty = zframe_new_empty();
+						zframe_t* empty = zframe_new_empty();
 						zframe_send(&empty, self->agent->stream, 0);
 						return;
 					}
@@ -280,72 +262,64 @@ void router_message_received(void *tag, byte* payload, int length)
 		zmsg_addmem(self->outgoing_msg, &payload[1], length - 1);
 	}
 
-	if (!more)
-	{
+	if (!more) {
 		zmsg_send(&self->outgoing_msg, self->agent->data);
 	}
 }
 
-void close_received(void *tag, byte* payload, int length)
-{
-	client_t *self = (client_t *)tag;
-	zframe_t *address = zframe_dup(self->address);
+void close_received(void* tag, byte* payload, int length) {
+	client_t* self = (client_t *)tag;
+	zframe_t* address = zframe_dup(self->address);
 	zframe_send(&address, self->agent->stream, ZFRAME_MORE);
-	zframe_t *empty = zframe_new_empty();
+	zframe_t* empty = zframe_new_empty();
 	zframe_send(&empty, self->agent->stream, 0);
 }
 
-void ping_received(void *tag, byte* payload, int length)
-{
-	client_t *self = (client_t *)tag;
+void ping_received(void* tag, byte* payload, int length) {
+	client_t* self = (client_t *)tag;
 
 	byte* pong = (byte*)zmalloc(2 + length);
 	pong[0] = 0x8A; // Pong and Final
 	pong[1] = (byte)(length & 127);
 	memcpy(pong + 2, payload, length);
 
-	zframe_t *address = zframe_dup(self->address);
+	zframe_t* address = zframe_dup(self->address);
 	zframe_send(&address, self->agent->stream, ZFRAME_MORE);
-	zframe_t *pongf = zframe_new(pong, length + 2);
+	zframe_t* pongf = zframe_new(pong, length + 2);
 	zframe_send(&pongf, self->agent->stream, 0);
 	free(pong);
 }
 
-void pong_received(void *tag, byte* payload, int length)
-{
+void pong_received(void* tag, byte* payload, int length) {
 	// TOOD: implement pong
 }
 
-static void not_acceptable(zframe_t *_address, void *dest) {
-	zframe_t *address = zframe_dup(_address);
+static void not_acceptable(zframe_t *_address, void* dest) {
+	zframe_t* address = zframe_dup(_address);
 	zframe_send(&address, dest, ZFRAME_MORE + ZFRAME_REUSE);
 	zstr_send (dest, "HTTP/1.1 406 Not Acceptable\r\n\r\n");
 
 	zframe_send(&address, dest, ZFRAME_MORE);
-	zframe_t *empty = zframe_new_empty();
+	zframe_t* empty = zframe_new_empty();
 	zframe_send(&empty, dest, 0);
 }
 
-static void client_data_ready(client_t * self)
-{
+static void client_data_ready(client_t* self) {
 	zframe_t* data;
-	zwshandshake_t * handshake;
+	zwshandshake_t* handshake;
 
 	data = zframe_recv(self->agent->stream);
 
-	switch (self->state)
-	{
+	switch (self->state) {
 	case closed:
 		// TODO: we might didn't receive the entire request, make the zwshandshake able to handle multiple inputs
 
 		handshake = zwshandshake_new();
-		if (zwshandshake_parse_request(handshake, data))
-		{
+		if (zwshandshake_parse_request(handshake, data)) {
 			// request is valid, getting the response
 			zframe_t* response = zwshandshake_get_response(handshake, &self->client_max_window_bits, &self->server_max_window_bits);
-			if (response)
-			{
-				zframe_t *address = zframe_dup(self->address);
+			if (response) {
+				zframe_t* address = zframe_dup(self->address);
 
 				zframe_send(&address, self->agent->stream, ZFRAME_MORE);
 				zframe_send(&response, self->agent->stream, 0);
@@ -371,15 +345,13 @@ static void client_data_ready(client_t * self)
 				self->decoder = zwsdecoder_new(self, &router_message_received, &close_received, &ping_received, &pong_received);
 				self->state = connected;
 			}
-			else
-			{
+			else {
 				// request is invalid, for example the message does not contain the required headers
 				self->state = exception;
 				not_acceptable(self->address, self->agent->stream);
 			}
 		}
-		else
-		{
+		else {
 			// request is invalid
 			self->state = exception;
 		}
@@ -389,8 +361,7 @@ static void client_data_ready(client_t * self)
 	case connected:
 		zwsdecoder_process_buffer(self->decoder, data);
 
-		if (zwsdecoder_is_errored(self->decoder))
-		{
+		if (zwsdecoder_is_errored(self->decoder)) {
 			self->state = exception;
 		}
 
@@ -406,24 +377,22 @@ static void client_data_ready(client_t * self)
 
 //  Callback when we remove client from 'clients' hash table
 static void
-client_free(void *argument)
-{
-	client_t *client = (client_t *)argument;
+client_free(void* argument) {
+	client_t* client = (client_t *)argument;
 	client_destroy(&client);
 }
 
 static int
-s_agent_handle_control(agent_t *self)
-{
+s_agent_handle_control(agent_t* self) {
 	//  Get the whole message off the control socket in one go
 	int rc = 0;
-	zmsg_t *request = zmsg_recv(self->control);
-	char *command = zmsg_popstr(request);
+	zmsg_t* request = zmsg_recv(self->control);
+	char* command = zmsg_popstr(request);
 	if (!command)
 		return -1;                  //  Interrupted
 
 	if (streq(command, "BIND")) {
-		char *endpoint = zmsg_popstr(request);
+		char* endpoint = zmsg_popstr(request);
 		printf("Target endpoint: %s\n", endpoint);
 		rc = zsock_bind(self->stream, "%s", endpoint);
 		assert(rc != -1);
@@ -431,7 +400,7 @@ s_agent_handle_control(agent_t *self)
 		free(endpoint);
 	}
 	else if (streq(command, "UNBIND")) {
-		char *endpoint = zmsg_popstr(request);
+		char* endpoint = zmsg_popstr(request);
 		rc = zsock_unbind(self->stream, "%s", endpoint);
 		assert(rc != -1);
 		free(endpoint);
@@ -447,11 +416,10 @@ s_agent_handle_control(agent_t *self)
 //  Handle a message from the server
 
 static int
-s_agent_handle_router(agent_t *self)
-{
-	zframe_t *address = zframe_recv(self->stream);
-	char *hashkey = zframe_strhex(address);
-	client_t *client = zhash_lookup(self->clients, hashkey);
+s_agent_handle_router(agent_t* self) {
+	zframe_t* address = zframe_recv(self->stream);
+	char* hashkey = zframe_strhex(address);
+	client_t* client = zhash_lookup(self->clients, hashkey);
 	if (client == NULL) {
 		client = client_new(self, address);
 
@@ -471,17 +439,15 @@ s_agent_handle_router(agent_t *self)
 }
 
 static void
-compute_frame_header(byte header, int payloadLength, int *frameSize, int *payloadStartIndex, byte *outgoingData) {
+compute_frame_header(byte header, int payloadLength, int* frameSize, int* payloadStartIndex, byte* outgoingData) {
 	*frameSize = 2 + payloadLength;
 	*payloadStartIndex = 2;
 
-	if (payloadLength > 125)
-	{
+	if (payloadLength > 125) {
 		*frameSize += 2;
 		*payloadStartIndex += 2;
 
-		if (payloadLength > 0xFFFF) // 2 bytes max value
-		{
+		if (payloadLength > 0xFFFF) { // 2 bytes max value
 			*frameSize += 6;
 			*payloadStartIndex += 6;
 		}
@@ -492,18 +458,13 @@ compute_frame_header(byte header, int payloadLength, int *frameSize, int *payloa
 	// No mask
 	outgoingData[1] = 0x00;
 
-	if (payloadLength <= 125)
-	{
+	if (payloadLength <= 125) {
 		outgoingData[1] |= (byte)(payloadLength & 127);
-	}
-	else if (payloadLength <= 0xFFFF) // maximum size of short
-	{
+	} else if (payloadLength <= 0xFFFF) { // maximum size of short
 		outgoingData[1] |= 126;
 		outgoingData[2] = (payloadLength >> 8) & 0xFF;
 		outgoingData[3] = payloadLength & 0xFF;
-	}
-	else
-	{
+	} else {
 		outgoingData[1] |= 127;
 		outgoingData[2] = 0;
 		outgoingData[3] = 0;
@@ -517,14 +478,13 @@ compute_frame_header(byte header, int payloadLength, int *frameSize, int *payloa
 }
 
 static int
-s_agent_handle_data(agent_t *self)
-{
+s_agent_handle_data(agent_t* self) {
 	//  First frame is client address (hashkey)
 	//  If caller sends unknown client address, we discard the message
 	//  The assert disappears when we start to timeout clients...
-	zmsg_t *request = zmsg_recv(self->data);
-	char *hashkey = zmsg_popstr(request);
-	client_t *client = zhash_lookup(self->clients, hashkey);
+	zmsg_t* request = zmsg_recv(self->data);
+	char* hashkey = zmsg_popstr(request);
+	client_t* client = zhash_lookup(self->clients, hashkey);
 
 	zframe_t* address;
 
@@ -534,14 +494,13 @@ s_agent_handle_data(agent_t *self)
 		while (zmsg_size(request)) {
 			printf("	Request size: %u\n", zmsg_size(request));  // DEBUG
 
-			zframe_t *receivedFrame = zmsg_pop(request);
+			zframe_t* receivedFrame = zmsg_pop(request);
 			bool more = false;
 
 			if (zmsg_size(request))
 				more = true;
 
-			if (client->server_max_window_bits > 0)
-			{
+			if (client->server_max_window_bits > 0) {
 				byte byte_no_more = 0;
 				byte byte_more = 1;
 
@@ -550,7 +509,7 @@ s_agent_handle_data(agent_t *self)
 
 				// This assumes that a compressed message is never longer than 64 bytes plus the original message. A better assumption without realloc would be great.
 				unsigned int available = frameSize + 64 + 10;
-				byte *compressedPayload = (byte*)zmalloc(available);
+				byte* compressedPayload = (byte*)zmalloc(available);
 				client->permessage_deflate_server.avail_in = 1;
 				client->permessage_deflate_server.next_in  = (more ? &byte_more : &byte_no_more);
 				client->permessage_deflate_server.avail_out = available;
@@ -579,14 +538,13 @@ s_agent_handle_data(agent_t *self)
 
 				zframe_send(&address, self->stream, ZFRAME_MORE);
 				
-				zframe_t *data = zframe_new(outgoingData, frameSize);
+				zframe_t* data = zframe_new(outgoingData, frameSize);
 				zframe_send(&data, self->stream, 0);
 
 				free(compressedPayload);
 				zframe_destroy(&receivedFrame);
             }
-			else
-			{
+			else {
 				printf("No client of key %s", hashkey);  // DEBUG
 				int payloadLength = zframe_size(receivedFrame) + 1;
 				byte* outgoingData = (byte*)zmalloc(payloadLength + 10); /* + 10 = max size of header */
@@ -605,7 +563,7 @@ s_agent_handle_data(agent_t *self)
 
 				zframe_send(&address, self->stream, ZFRAME_MORE);
 				
-				zframe_t *data = zframe_new(outgoingData, frameSize);
+				zframe_t* data = zframe_new(outgoingData, frameSize);
 				zframe_send(&data, self->stream, 0);
 
 				free(outgoingData);
@@ -621,20 +579,19 @@ s_agent_handle_data(agent_t *self)
 	return 0;
 }
 
-void s_agent_task(zsock_t *control, void *args)
-{
+void s_agent_task(zsock_t* control, void* args) {
 	// let main thread continue
 	zsock_signal(control, 0);
 
 	//  Create agent instance as we start this task
-	agent_t *self = s_agent_new(control);
+	agent_t* self = s_agent_new(control);
 	if (!self)                  //  Interrupted
 		return;
 
-	zpoller_t *poller = zpoller_new(self->control, self->stream, self->data, NULL);
+	zpoller_t* poller = zpoller_new(self->control, self->stream, self->data, NULL);
 	assert(poller);
 
-	void *which;
+	void* which;
 
 	while ((which = zpoller_wait(poller, -1)) != NULL) {
 		if (zpoller_terminated(poller)) {
