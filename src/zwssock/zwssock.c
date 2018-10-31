@@ -356,15 +356,14 @@ static void client_data_ready(client_t* self) {
 			self->state = exception;
 		}
 		zwshandshake_destroy(&handshake);
-
 		break;
+
 	case connected:
 		zwsdecoder_process_buffer(self->decoder, data);
 
 		if (zwsdecoder_is_errored(self->decoder)) {
 			self->state = exception;
 		}
-
 		break;
 
 	case exception:

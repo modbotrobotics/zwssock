@@ -1,18 +1,41 @@
 #include "zwsdecoder.h"
 
 typedef enum {
-	opcode_continuation = 0, opcode_text = 0x01, opcode_binary = 0x02, opcode_close = 0x08, opcode_ping = 0x09, opcode_pong = 0xA
+	opcode_continuation		= 0,
+	opcode_text 					= 0x01,
+	opcode_binary 				= 0x02,
+	opcode_close 					= 0x08,
+	opcode_ping 					= 0x09,
+	opcode_pong 					= 0xA
 } opcode_t;
 
 typedef enum {
-	new_message,second_byte,short_size,short_size_2,
-	long_size,long_size_2,long_size_3,long_size_4,long_size_5,long_size_6,long_size_7,long_size_8,
-	mask,mask_2,mask_3,mask_4,begin_payload,payload,error
+	STATE_NEW_MESSAGE,
+	STATE_SECOND_BYTE,
+	STATE_SHORT_SIZE,
+	STATE_SHORT_SIZE_2,
+
+	STATE_LONG_SIZE,
+	STATE_LONG_SIZE_2,
+	STATE_LONG_SIZE_3,
+	STATE_LONG_SIZE_4,
+	STATE_LONG_SIZE_5,
+	STATE_LONG_SIZE_6,
+	STATE_LONG_SIZE_7,
+	STATE_LONG_SIZE_8,
+
+	STATE_MASK,
+	STATE_MASK_2,
+	STATE_MASK_3,
+	STATE_MASK_4,
+
+	STATE_BEGIN_PAYLOAD,
+	STATE_PAYLOAD,
+	STATE_ERROR
 } state_t;
 
 struct _zwsdecoder_t {
 	state_t state;
-
 	opcode_t opcode;
 	bool is_masked;
 	byte mask[4];
@@ -27,15 +50,19 @@ struct _zwsdecoder_t {
 };
 
 // private methods
-static void zwsdecoder_process_byte(zwsdecoder_t* self, byte b);
+static void invoke_STATE_NEW_MESSAGE(zwsdecoder_t* self);
 static state_t zwsdecoder_next_state(zwsdecoder_t* self);
-static void invoke_new_message(zwsdecoder_t* self);
+static void zwsdecoder_process_byte(zwsdecoder_t* self, byte b);
 
-
-zwsdecoder_t* zwsdecoder_new(void* tag, message_callback_t message_cb, close_callback_t close_cb, ping_callback_t ping_cb, pong_callback_t pong_cb) {
+zwsdecoder_t* zwsdecoder_new(
+		void* tag,
+		message_callback_t message_cb,
+		close_callback_t close_cb,
+		ping_callback_t ping_cb,
+		pong_callback_t pong_cb) {
 	zwsdecoder_t* self = zmalloc(sizeof(zwsdecoder_t));
 
-	self->state = new_message;
+	self->state = STATE_NEW_MESSAGE;
 	self->tag = tag;
 	self->message_cb = message_cb;
 	self->close_cb = close_cb;
@@ -62,15 +89,15 @@ void zwsdecoder_process_buffer(zwsdecoder_t* self, zframe_t* data) {
 
 	while (i < buffer_length) {
 		switch (self->state) {
-		case error:
+		case STATE_ERROR:
 			return;
-		case begin_payload:
+		case STATE_BEGIN_PAYLOAD:
 
 			self->payload_index = 0;
 			self->payload = zmalloc(sizeof(byte) * (self->payload_length + 4)); // +4 extra bytes in case we have to inflate it
 
 			// continue to payload
-		case payload:
+		case STATE_PAYLOAD:
 			bytes_to_read = self->payload_length - self->payload_index;
 
 			if (bytes_to_read > (buffer_length - i)) {
@@ -89,12 +116,12 @@ void zwsdecoder_process_buffer(zwsdecoder_t* self, zframe_t* data) {
 			i += bytes_to_read;
 
 			if (self->payload_index < self->payload_length) {
-				self->state = payload;
+				self->state = STATE_PAYLOAD;
 			} else {
 				// temp(this, new MessageEventArgs(m_opcode, m_payload, m_more));
 
-				self->state = new_message;
-				invoke_new_message(self);
+				self->state = STATE_NEW_MESSAGE;
+				invoke_STATE_NEW_MESSAGE(self);
 			}
 
 			break;
@@ -110,23 +137,26 @@ static void zwsdecoder_process_byte(zwsdecoder_t* self, byte b) {
 	bool final;
 
 	switch (self->state) {
-	case new_message:
+	case STATE_NEW_MESSAGE:
 		final = (b & 0x80) != 0; // final bit
 		self->opcode = b & 0xF; // opcode bit
 
 		// not final messages are currently not supported
 		if (!final) {
-			self->state = error;
+			self->state = STATE_ERROR;
 		}
-		// check that the opcode is supported
-		else if (self->opcode != opcode_binary && self->opcode != opcode_close && self->opcode != opcode_ping && self->opcode != opcode_pong) {
-			self->state = error;
+		// Check that the opcode is supported
+		else if (self->opcode != opcode_binary
+					&& self->opcode != opcode_close
+					&& self->opcode != opcode_ping
+					&& self->opcode != opcode_pong) {
+			self->state = STATE_ERROR;
 		}
 		else {
-			self->state = second_byte;
+			self->state = STATE_SECOND_BYTE;
 		}
 		break;
-	case second_byte:
+	case STATE_SECOND_BYTE:
 		self->is_masked = (b & 0x80) != 0;
 
 		byte length = (byte)(b & 0x7F);
@@ -136,107 +166,107 @@ static void zwsdecoder_process_byte(zwsdecoder_t* self, byte b) {
 			self->state = zwsdecoder_next_state(self);
 		}
 		else if (length == 126) {
-			self->state = short_size;
+			self->state = STATE_SHORT_SIZE;
 		}
 		else {
-			self->state = long_size;
+			self->state = STATE_LONG_SIZE;
 		}
 		break;
-	case mask:
+	case STATE_MASK:
 		self->mask[0] = b;
-		self->state = mask_2;
+		self->state = STATE_MASK_2;
 		break;
-	case mask_2:
+	case STATE_MASK_2:
 		self->mask[1] = b;
-		self->state = mask_3;
+		self->state = STATE_MASK_3;
 		break;
-	case mask_3:
+	case STATE_MASK_3:
 		self->mask[2] = b;
-		self->state = mask_4;
+		self->state = STATE_MASK_4;
 		break;
-	case mask_4:
+	case STATE_MASK_4:
 		self->mask[3] = b;
 		self->state = zwsdecoder_next_state(self);
 		break;
-	case short_size:
+	case STATE_SHORT_SIZE:
 		self->payload_length = b << 8;
-		self->state = short_size_2;
+		self->state = STATE_SHORT_SIZE_2;
 		break;
-	case short_size_2:
+	case STATE_SHORT_SIZE_2:
 		self->payload_length |= b;
 		self->state = zwsdecoder_next_state(self);
 		break;
-	case long_size:
+	case STATE_LONG_SIZE:
 		self->payload_length = 0;
 
 		// must be zero, max message size is MaxInt
 		if (b != 0)
-			self->state = error;
+			self->state = STATE_ERROR;
 		else
-			self->state = long_size_2;
+			self->state = STATE_LONG_SIZE_2;
 		break;
-	case long_size_2:
+	case STATE_LONG_SIZE_2:
 		// must be zero, max message size is MaxInt
 		if (b != 0)
-			self->state = error;
+			self->state = STATE_ERROR;
 		else
-			self->state = long_size_3;
+			self->state = STATE_LONG_SIZE_3;
 		break;
-	case long_size_3:
+	case STATE_LONG_SIZE_3:
 		// must be zero, max message size is MaxInt
 		if (b != 0)
-			self->state = error;
+			self->state = STATE_ERROR;
 		else
-			self->state = long_size_4;
+			self->state = STATE_LONG_SIZE_4;
 		break;
-	case long_size_4:
+	case STATE_LONG_SIZE_4:
 		// must be zero, max message size is MaxInt
 		if (b != 0)
-			self->state = error;
+			self->state = STATE_ERROR;
 		else
-			self->state = long_size_5;
+			self->state = STATE_LONG_SIZE_5;
 		break;
-	case long_size_5:
+	case STATE_LONG_SIZE_5:
 		self->payload_length |= b << 24;
-		self->state = long_size_6;
+		self->state = STATE_LONG_SIZE_6;
 		break;
-	case long_size_6:
+	case STATE_LONG_SIZE_6:
 		self->payload_length |= b << 16;
-		self->state = long_size_7;
+		self->state = STATE_LONG_SIZE_7;
 		break;
-	case long_size_7:
+	case STATE_LONG_SIZE_7:
 		self->payload_length |= b << 8;
-		self->state = long_size_8;
+		self->state = STATE_LONG_SIZE_8;
 		break;
-	case long_size_8:
+	case STATE_LONG_SIZE_8:
 		self->payload_length |= b;
 		self->state = zwsdecoder_next_state(self);
 		break;
-	case begin_payload:
-	case payload:
-	case error:
-	    ;
-	    // XXXX unhandled
+	case STATE_BEGIN_PAYLOAD:
+	case STATE_PAYLOAD:
+	case STATE_ERROR:
+		// UNIMPLEMENTED
+		break;
 	}
 }
 
 static state_t zwsdecoder_next_state(zwsdecoder_t* self) {
-	if ((self->state == long_size_8 || self->state == second_byte || self->state == short_size_2) && self->is_masked) {
-		return mask;
+	if ((self->state == STATE_LONG_SIZE_8 || self->state == STATE_SECOND_BYTE || self->state == STATE_SHORT_SIZE_2) && self->is_masked) {
+		return STATE_MASK;
 	}
 	else {
 		if (self->payload_length == 0) {
-			invoke_new_message(self);
+			invoke_STATE_NEW_MESSAGE(self);
 
-			return new_message;
+			return STATE_NEW_MESSAGE;
 		}
 		else
-			return begin_payload;
+			return STATE_BEGIN_PAYLOAD;
 
 	}
 }
 
-static void invoke_new_message(zwsdecoder_t* self) {
+static void invoke_STATE_NEW_MESSAGE(zwsdecoder_t* self) {
 	switch (self->opcode) {
 	case opcode_binary:
 		self->message_cb(self->tag, self->payload, self->payload_length);
@@ -261,5 +291,5 @@ static void invoke_new_message(zwsdecoder_t* self) {
 }
 
 bool zwsdecoder_is_errored(zwsdecoder_t* self) {
-	return self->state == error;
+	return self->state == STATE_ERROR;
 }
