@@ -2,7 +2,7 @@
 
 #include "zwssock/zwssock.h"
 
-static char *listen_on = "tcp://127.0.0.1:8000";
+static char *listen_on = "tcp://0.0.0.0:15798";
 
 int main(int argc, char **argv)
 {
@@ -34,14 +34,10 @@ int main(int argc, char **argv)
 		// first message is the routing id
 		id = zmsg_pop(msg);
 
-		while (zmsg_size(msg) != 0)
-		{
-			char * str = zmsg_popstr(msg);
-
-			printf("%s\n", str);
-
-			free(str);
-		}
+		char * str = zmsg_popstr(msg);
+		int mint = zmsg_pop(msg);
+		printf("Received: \"%s\", %u\n", str, mint);
+		free(str);
 
 		zmsg_destroy(&msg);
 

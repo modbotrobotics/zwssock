@@ -85,10 +85,10 @@ zsock_t* zwssock_handle(zwssock_t *self)
 //  *************************    BACK END AGENT    *************************
 
 typedef struct {
-	zsock_t *control;              //  Control socket back to application
-	zsock_t *data;                 //  Data socket to application
-	zsock_t *stream;               //  stream socket to server
-	zhash_t *clients;           //  Clients known so far
+	zsock_t *control;              														// Control socket back to application
+	zsock_t *data;                 														// Data socket to application
+	zsock_t *stream;               														// Stream socket to server
+	zhash_t *clients;           															// Known clients
 } agent_t;
 
 static agent_t *
@@ -126,15 +126,15 @@ s_agent_destroy(agent_t **self_p)
 //  This section covers a single client connection
 typedef enum {
 	closed = 0,
-	connected = 1,              //  Ready for messages
-	exception = 2               //  Failed due to some error
+	connected = 1,
+	exception = 2
 } state_t;
 
 typedef struct {
-	agent_t *agent;             //  Agent for this client
+	agent_t *agent;             //  Client's agent
 	state_t state;              //  Current state
 	zframe_t *address;          //  Client address identity
-	char *hashkey;              //  Key into clients hash
+	char *hashkey;              //  Client hash key
 	zwsdecoder_t* decoder;
 	unsigned char client_max_window_bits; // Requested compression factor by the server for the client
 	unsigned char server_max_window_bits; // Requested compression factor by the client for the server
@@ -211,11 +211,14 @@ void router_message_received(void *tag, byte* payload, int length)
 	client_t *self = (client_t *)tag;
 	bool more;
 
+	// Create outgoing message; lead with client ID
 	if (self->outgoing_msg == NULL)
 	{
 		self->outgoing_msg = zmsg_new();
 		zmsg_addstr(self->outgoing_msg, self->hashkey);
 	}
+	
+	printf("Router message received from client %s: \"%x\" (length %i)\n", self->hashkey, *payload, length);  // DEBUG
 
 	if (self->client_max_window_bits > 0) {
 		unsigned char out[CHUNK];
@@ -241,6 +244,7 @@ void router_message_received(void *tag, byte* payload, int length)
 			switch (ret) {
 				case Z_NEED_DICT:
 					ret = Z_DATA_ERROR;
+					break;
 				case Z_DATA_ERROR:
 				case Z_MEM_ERROR:
 					{
@@ -255,8 +259,11 @@ void router_message_received(void *tag, byte* payload, int length)
 						zframe_send(&empty, self->agent->stream, 0);
 						return;
 					}
+				default: 
+					break;
 			}
 			unsigned int length_inflated = CHUNK - self->permessage_deflate_client.avail_out;
+			printf("	Inflated length %u\n", length_inflated);  // DEBUG
 			if (!more_parsed) {
 				more_parsed = true;
 				more = (out[0] == 1);
@@ -409,6 +416,7 @@ static int
 s_agent_handle_control(agent_t *self)
 {
 	//  Get the whole message off the control socket in one go
+	int rc = 0;
 	zmsg_t *request = zmsg_recv(self->control);
 	char *command = zmsg_popstr(request);
 	if (!command)
@@ -416,15 +424,15 @@ s_agent_handle_control(agent_t *self)
 
 	if (streq(command, "BIND")) {
 		char *endpoint = zmsg_popstr(request);
-		puts(endpoint);
-		int rc = zsock_bind(self->stream, "%s", endpoint);
+		printf("Target endpoint: %s\n", endpoint);
+		rc = zsock_bind(self->stream, "%s", endpoint);
 		assert(rc != -1);
-		puts(zsock_endpoint(self->stream));
+		printf("Bound endpoint: %s\n", zsock_endpoint(self->stream));
 		free(endpoint);
 	}
 	else if (streq(command, "UNBIND")) {
 		char *endpoint = zmsg_popstr(request);
-		int rc = zsock_unbind(self->stream, "%s", endpoint);
+		rc = zsock_unbind(self->stream, "%s", endpoint);
 		assert(rc != -1);
 		free(endpoint);
 	}
@@ -433,7 +441,7 @@ s_agent_handle_control(agent_t *self)
 	}
 	free(command);
 	zmsg_destroy(&request);
-	return 0;
+	return rc;
 }
 
 //  Handle a message from the server
@@ -521,8 +529,11 @@ s_agent_handle_data(agent_t *self)
 	zframe_t* address;
 
 	if (client) {
+		printf("Processing response for client of key %s\n", hashkey);  // DEBUG
 		//  Each frame is a full ZMQ message with identity frame
 		while (zmsg_size(request)) {
+			printf("	Request size: %u\n", zmsg_size(request));  // DEBUG
+
 			zframe_t *receivedFrame = zmsg_pop(request);
 			bool more = false;
 
@@ -535,6 +546,7 @@ s_agent_handle_data(agent_t *self)
 				byte byte_more = 1;
 
 				int frameSize = zframe_size(receivedFrame);
+				printf("	Frame size: %i\n", frameSize);  // DEBUG
 
 				// This assumes that a compressed message is never longer than 64 bytes plus the original message. A better assumption without realloc would be great.
 				unsigned int available = frameSize + 64 + 10;
@@ -575,6 +587,7 @@ s_agent_handle_data(agent_t *self)
             }
 			else
 			{
+				printf("No client of key %s", hashkey);  // DEBUG
 				int payloadLength = zframe_size(receivedFrame) + 1;
 				byte* outgoingData = (byte*)zmalloc(payloadLength + 10); /* + 10 = max size of header */
 

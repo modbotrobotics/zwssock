@@ -1,5 +1,6 @@
 <html>
 <head>
+    <meta charset="utf-8"/>
     <title></title>
 
     <!--<script src="https://rawgit.com/zeromq/JSMQ/master/JSMQ.js"></script>-->
@@ -8,7 +9,7 @@
 
     <script>
         var dealer = new JSMQ.Dealer();
-        dealer.connect("ws://localhost:8000");
+        dealer.connect("ws://localhost:15798");
 
         // we must wait for the dealer to be connected before we can send messages, any messages we are trying to send
         // while the dealer is not connected will be dropped
@@ -23,8 +24,14 @@
 
         function send() {
             var message = new JSMQ.Message();
-            message.addString("extra frame");
-            message.addString(document.getElementById("messageTextBox").value);
+            var buffer = new ArrayBuffer(16);
+            var view = new DataView(buffer, 0);
+            view.setInt16(0, 2);
+            console.log("Buffer:", view.getInt16(0))
+            message.addString("discovery");
+            console.log("Message:", message);
+            message.frames.push(2);
+            // message.addString(document.getElementById("messageTextBox").value);
             dealer.send(message);
         }
     </script>
