@@ -201,8 +201,6 @@ void router_message_received(void* tag, byte* payload, int length) {
 		zmsg_addstr(self->outgoing_msg, self->hashkey);
 	}
 	
-	printf("Router message received from client %s: \"%x\" (length %i)\n", self->hashkey, *payload, length);  // DEBUG
-
 	if (self->client_max_window_bits > 0) {
 		unsigned char out[CHUNK];
 		byte* outgoingData = (byte*)zmalloc(length + 4);
@@ -245,7 +243,6 @@ void router_message_received(void* tag, byte* payload, int length) {
 					break;
 			}
 			unsigned int length_inflated = CHUNK - self->permessage_deflate_client.avail_out;
-			printf("	Inflated length %u\n", length_inflated);  // DEBUG
 			if (!more_parsed) {
 				more_parsed = true;
 				more = (out[0] == 1);
@@ -392,10 +389,8 @@ s_agent_handle_control(agent_t* self) {
 
 	if (streq(command, "BIND")) {
 		char* endpoint = zmsg_popstr(request);
-		printf("Target endpoint: %s\n", endpoint);
 		rc = zsock_bind(self->stream, "%s", endpoint);
 		assert(rc != -1);
-		printf("Bound endpoint: %s\n", zsock_endpoint(self->stream));
 		free(endpoint);
 	}
 	else if (streq(command, "UNBIND")) {
@@ -488,10 +483,8 @@ s_agent_handle_data(agent_t* self) {
 	zframe_t* address;
 
 	if (client) {
-		printf("Processing response for client of key %s\n", hashkey);  // DEBUG
 		//  Each frame is a full ZMQ message with identity frame
 		while (zmsg_size(request)) {
-			printf("	Request size: %u\n", zmsg_size(request));  // DEBUG
 
 			zframe_t* receivedFrame = zmsg_pop(request);
 			bool more = false;
@@ -504,7 +497,6 @@ s_agent_handle_data(agent_t* self) {
 				byte byte_more = 1;
 
 				int frameSize = zframe_size(receivedFrame);
-				printf("	Frame size: %i\n", frameSize);  // DEBUG
 
 				// This assumes that a compressed message is never longer than 64 bytes plus the original message. A better assumption without realloc would be great.
 				unsigned int available = frameSize + 64 + 10;
@@ -544,7 +536,6 @@ s_agent_handle_data(agent_t* self) {
 				zframe_destroy(&receivedFrame);
             }
 			else {
-				printf("No client of key %s", hashkey);  // DEBUG
 				int payloadLength = zframe_size(receivedFrame) + 1;
 				byte* outgoingData = (byte*)zmalloc(payloadLength + 10); /* + 10 = max size of header */
 

@@ -50,7 +50,7 @@ struct _zwsdecoder_t {
 };
 
 // private methods
-static void invoke_STATE_NEW_MESSAGE(zwsdecoder_t* self);
+static void invoke_new_message(zwsdecoder_t* self);
 static state_t zwsdecoder_next_state(zwsdecoder_t* self);
 static void zwsdecoder_process_byte(zwsdecoder_t* self, byte b);
 
@@ -121,7 +121,7 @@ void zwsdecoder_process_buffer(zwsdecoder_t* self, zframe_t* data) {
 				// temp(this, new MessageEventArgs(m_opcode, m_payload, m_more));
 
 				self->state = STATE_NEW_MESSAGE;
-				invoke_STATE_NEW_MESSAGE(self);
+				invoke_new_message(self);
 			}
 
 			break;
@@ -256,7 +256,7 @@ static state_t zwsdecoder_next_state(zwsdecoder_t* self) {
 	}
 	else {
 		if (self->payload_length == 0) {
-			invoke_STATE_NEW_MESSAGE(self);
+			invoke_new_message(self);
 
 			return STATE_NEW_MESSAGE;
 		}
@@ -266,7 +266,7 @@ static state_t zwsdecoder_next_state(zwsdecoder_t* self) {
 	}
 }
 
-static void invoke_STATE_NEW_MESSAGE(zwsdecoder_t* self) {
+static void invoke_new_message(zwsdecoder_t* self) {
 	switch (self->opcode) {
 	case opcode_binary:
 		self->message_cb(self->tag, self->payload, self->payload_length);
