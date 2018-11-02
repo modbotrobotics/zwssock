@@ -1,4 +1,4 @@
-# ZWSSock - ZeroMQ over WebSocket library
+# ZWSSock - ZeroMQ over WebSockets & C
 
 Forked from [zeromq/zwssock](https://github.com/zeromq/zwssock).
 
@@ -30,3 +30,6 @@ To include the library in your project, use the prebuilt conan package or recipe
 To use the ZWSSock library take a look at [test/c_test.c](https://github.com/modbotrobotics/zwssock/blob/master/test/c_test.c) file. 
 The project also includes [browser side example](https://github.com/modbotrobotics/zwssock/blob/master/test/example.html).
 
+## Notes
+
+Header: `0xC2`

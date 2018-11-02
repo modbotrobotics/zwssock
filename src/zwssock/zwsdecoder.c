@@ -49,7 +49,7 @@ struct _zwsdecoder_t {
 	pong_callback_t pong_cb;
 };
 
-// private methods
+// Private methods
 static void invoke_new_message(zwsdecoder_t* self);
 static state_t zwsdecoder_next_state(zwsdecoder_t* self);
 static void zwsdecoder_process_byte(zwsdecoder_t* self, byte b);
@@ -89,46 +89,49 @@ void zwsdecoder_process_buffer(zwsdecoder_t* self, zframe_t* data) {
 
 	while (i < buffer_length) {
 		switch (self->state) {
-		case STATE_ERROR:
-			return;
-		case STATE_BEGIN_PAYLOAD:
+			case STATE_ERROR:
+				return;
 
-			self->payload_index = 0;
-			self->payload = zmalloc(sizeof(byte) * (self->payload_length + 4)); // +4 extra bytes in case we have to inflate it
+			// Set-up payload
+			case STATE_BEGIN_PAYLOAD:
+				self->payload_index = 0;
+				self->payload = zmalloc(sizeof(byte) * (self->payload_length + 4)); // +4 extra bytes in case we have to inflate it
 
-			// continue to payload
-		case STATE_PAYLOAD:
-			bytes_to_read = self->payload_length - self->payload_index;
 
-			if (bytes_to_read > (buffer_length - i)) {
-				bytes_to_read = buffer_length - i;
-			}
+			case STATE_PAYLOAD:
+				bytes_to_read = self->payload_length - self->payload_index;
 
-			memcpy(self->payload + self->payload_index, buffer + i, bytes_to_read);
-
-			if (self->is_masked) {
-				for (int j = self->payload_index; j < self->payload_index + bytes_to_read; j++) {
-					self->payload[j] = self->payload[j] ^ self->mask[(j) % 4];
+				if (bytes_to_read > (buffer_length - i)) {
+					bytes_to_read = buffer_length - i;
 				}
-			}
 
-			self->payload_index += bytes_to_read;
-			i += bytes_to_read;
+				memcpy(self->payload + self->payload_index, buffer + i, bytes_to_read);
 
-			if (self->payload_index < self->payload_length) {
-				self->state = STATE_PAYLOAD;
-			} else {
-				// temp(this, new MessageEventArgs(m_opcode, m_payload, m_more));
+				// If masked, apply the mask
+				if (self->is_masked) {
+					for (int j = self->payload_index; j < self->payload_index + bytes_to_read; j++) {
+						self->payload[j] = self->payload[j] ^ self->mask[(j) % 4];
+					}
+				}
 
-				self->state = STATE_NEW_MESSAGE;
-				invoke_new_message(self);
-			}
+				self->payload_index += bytes_to_read;
+				i += bytes_to_read;
 
-			break;
-		default:
-			zwsdecoder_process_byte(self, buffer[i]);
-			i++;
-			break;
+				// If we are processing the payload, continue to payload state
+				if (self->payload_index < self->payload_length) {
+					self->state = STATE_PAYLOAD;
+
+				// If we have passed the payload, we are processing a new message
+				} else {
+					self->state = STATE_NEW_MESSAGE;
+					invoke_new_message(self);
+				}
+				break;
+
+			default:
+				zwsdecoder_process_byte(self, buffer[i]);
+				i++;
+				break;
 		}
 	}
 }
@@ -137,116 +140,136 @@ static void zwsdecoder_process_byte(zwsdecoder_t* self, byte b) {
 	bool final;
 
 	switch (self->state) {
-	case STATE_NEW_MESSAGE:
-		final = (b & 0x80) != 0; // final bit
-		self->opcode = b & 0xF; // opcode bit
+		case STATE_NEW_MESSAGE:
+			final = (b & 0x80) != 0; // final bit
+			self->opcode = b & 0xF; // opcode bit
 
-		// not final messages are currently not supported
-		if (!final) {
-			self->state = STATE_ERROR;
-		}
-		// Check that the opcode is supported
-		else if (self->opcode != opcode_binary
-					&& self->opcode != opcode_close
-					&& self->opcode != opcode_ping
-					&& self->opcode != opcode_pong) {
-			self->state = STATE_ERROR;
-		}
-		else {
-			self->state = STATE_SECOND_BYTE;
-		}
-		break;
-	case STATE_SECOND_BYTE:
-		self->is_masked = (b & 0x80) != 0;
 
-		byte length = (byte)(b & 0x7F);
+			// not final messages are currently not supported
+			if (!final) {
+				self->state = STATE_ERROR;
 
-		if (length < 126) {
-			self->payload_length = length;
+			// Check that the opcode is supported
+			} else if (self->opcode != opcode_binary
+						&& self->opcode != opcode_close
+						&& self->opcode != opcode_ping
+						&& self->opcode != opcode_pong) {
+				self->state = STATE_ERROR;
+			} else {
+				self->state = STATE_SECOND_BYTE;
+			}
+			break;
+
+		case STATE_SECOND_BYTE:
+			self->is_masked = (b & 0x80) != 0;
+			byte length = (byte)(b & 0x7F);
+
+			if (length < 126) {
+				self->payload_length = length;
+				self->state = zwsdecoder_next_state(self);
+
+			} else if (length == 126) {
+				self->state = STATE_SHORT_SIZE;
+
+			} else {
+				self->state = STATE_LONG_SIZE;
+			}
+			break;
+
+		case STATE_MASK:
+			self->mask[0] = b;
+			self->state = STATE_MASK_2;
+			break;
+
+		case STATE_MASK_2:
+			self->mask[1] = b;
+			self->state = STATE_MASK_3;
+			break;
+
+		case STATE_MASK_3:
+			self->mask[2] = b;
+			self->state = STATE_MASK_4;
+			break;
+
+		case STATE_MASK_4:
+			self->mask[3] = b;
 			self->state = zwsdecoder_next_state(self);
-		}
-		else if (length == 126) {
-			self->state = STATE_SHORT_SIZE;
-		}
-		else {
-			self->state = STATE_LONG_SIZE;
-		}
-		break;
-	case STATE_MASK:
-		self->mask[0] = b;
-		self->state = STATE_MASK_2;
-		break;
-	case STATE_MASK_2:
-		self->mask[1] = b;
-		self->state = STATE_MASK_3;
-		break;
-	case STATE_MASK_3:
-		self->mask[2] = b;
-		self->state = STATE_MASK_4;
-		break;
-	case STATE_MASK_4:
-		self->mask[3] = b;
-		self->state = zwsdecoder_next_state(self);
-		break;
-	case STATE_SHORT_SIZE:
-		self->payload_length = b << 8;
-		self->state = STATE_SHORT_SIZE_2;
-		break;
-	case STATE_SHORT_SIZE_2:
-		self->payload_length |= b;
-		self->state = zwsdecoder_next_state(self);
-		break;
-	case STATE_LONG_SIZE:
-		self->payload_length = 0;
+			break;
 
-		// must be zero, max message size is MaxInt
-		if (b != 0)
-			self->state = STATE_ERROR;
-		else
-			self->state = STATE_LONG_SIZE_2;
-		break;
-	case STATE_LONG_SIZE_2:
-		// must be zero, max message size is MaxInt
-		if (b != 0)
-			self->state = STATE_ERROR;
-		else
-			self->state = STATE_LONG_SIZE_3;
-		break;
-	case STATE_LONG_SIZE_3:
-		// must be zero, max message size is MaxInt
-		if (b != 0)
-			self->state = STATE_ERROR;
-		else
-			self->state = STATE_LONG_SIZE_4;
-		break;
-	case STATE_LONG_SIZE_4:
-		// must be zero, max message size is MaxInt
-		if (b != 0)
-			self->state = STATE_ERROR;
-		else
-			self->state = STATE_LONG_SIZE_5;
-		break;
-	case STATE_LONG_SIZE_5:
-		self->payload_length |= b << 24;
-		self->state = STATE_LONG_SIZE_6;
-		break;
-	case STATE_LONG_SIZE_6:
-		self->payload_length |= b << 16;
-		self->state = STATE_LONG_SIZE_7;
-		break;
-	case STATE_LONG_SIZE_7:
-		self->payload_length |= b << 8;
-		self->state = STATE_LONG_SIZE_8;
-		break;
-	case STATE_LONG_SIZE_8:
-		self->payload_length |= b;
-		self->state = zwsdecoder_next_state(self);
-		break;
-	case STATE_BEGIN_PAYLOAD:
-	case STATE_PAYLOAD:
-	case STATE_ERROR:
-		// UNIMPLEMENTED
-		break;
+		case STATE_SHORT_SIZE:
+			self->payload_length = b << 8;
+			self->state = STATE_SHORT_SIZE_2;
+			break;
+
+		case STATE_SHORT_SIZE_2:
+			self->payload_length |= b;
+			self->state = zwsdecoder_next_state(self);
+			break;
+
+		case STATE_LONG_SIZE:
+			self->payload_length = 0;
+
+			// must be zero, max message size is MaxInt
+			if (b != 0)
+				self->state = STATE_ERROR;
+			else
+				self->state = STATE_LONG_SIZE_2;
+
+			break;
+
+		case STATE_LONG_SIZE_2:
+			// must be zero, max message size is MaxInt
+			if (b != 0)
+				self->state = STATE_ERROR;
+			else
+				self->state = STATE_LONG_SIZE_3;
+			break;
+
+		case STATE_LONG_SIZE_3:
+			// must be zero, max message size is MaxInt
+			if (b != 0)
+				self->state = STATE_ERROR;
+			else
+				self->state = STATE_LONG_SIZE_4;
+			break;
+
+		case STATE_LONG_SIZE_4:
+			// must be zero, max message size is MaxInt
+			if (b != 0)
+				self->state = STATE_ERROR;
+			else
+				self->state = STATE_LONG_SIZE_5;
+			break;
+
+		case STATE_LONG_SIZE_5:
+			self->payload_length |= b << 24;
+			self->state = STATE_LONG_SIZE_6;
+			break;
+
+		case STATE_LONG_SIZE_6:
+			self->payload_length |= b << 16;
+			self->state = STATE_LONG_SIZE_7;
+			break;
+
+		case STATE_LONG_SIZE_7:
+			self->payload_length |= b << 8;
+			self->state = STATE_LONG_SIZE_8;
+			break;
+
+		case STATE_LONG_SIZE_8:
+			self->payload_length |= b;
+			self->state = zwsdecoder_next_state(self);
+			break;
+
+		case STATE_BEGIN_PAYLOAD:
+			break;
+
+		case STATE_PAYLOAD:
+			break;
+
+		case STATE_ERROR:
+			// UNIMPLEMENTED
+			break;
 	}
 }
 

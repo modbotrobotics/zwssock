@@ -282,7 +282,7 @@ bool zwshandshake_parse_request(zwshandshake_t* self, zframe_t* data) {
 }
 
 bool zwshandshake_validate(zwshandshake_t* self) {
-	// TODO: validate that the request is valid
+	// TODO: validate the request
 	return true;
 }
 
@@ -319,7 +319,7 @@ int encode_base64(const uint8_t* in, int in_len, char* out, int out_len) {
 
 }
 
-zframe_t* zwshandshake_get_response(zwshandshake_t* self, unsigned char* client_max_window_bits, unsigned char* server_max_window_bits) {
+zframe_t* zwshandshake_get_response(zwshandshake_t* self, unsigned char* client_compression_factor, unsigned char* server_compression_factor) {
 	const char* sec_websocket_key_name = "sec-websocket-key";
 	const char* magic_string = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 
@@ -350,48 +350,48 @@ zframe_t* zwshandshake_get_response(zwshandshake_t* self, unsigned char* client_
 	// it only implements the bare minimum to get compression going, consider it a TODO
 	// to implement a proper parsing of both HTTP Headers as sec-websocket-extensions list.
 
-	/* Implementation of permessage-deflate, client_max_window_bits and server_max_window_bits */
+	/* Implementation of permessage-deflate, client_compression_factor and server_compression_factor */
 	const char* sec_websocket_extensions_name = "sec-websocket-extensions";
 	bool extension_permessage_deflate = false;
-	bool extension_client_max_window_bits = false;
-	bool extension_server_max_window_bits = false;
+	bool extension_client_compression_factor = false;
+	bool extension_server_compression_factor = false;
 
 	char* key_extensions = zhash_lookup(self->header_fields, sec_websocket_extensions_name);
 	if (key_extensions && strstr(key_extensions, "permessage-deflate") != NULL &&
-		*client_max_window_bits > 0 && *server_max_window_bits > 0) {
+		*client_compression_factor > 0 && *server_compression_factor > 0) {
 
 		extension_permessage_deflate = true;
-		if (strstr(key_extensions, "client_max_window_bits") != NULL) {
-			extension_client_max_window_bits = true;
+		if (strstr(key_extensions, "client_compression_factor") != NULL) {
+			extension_client_compression_factor = true;
 		} else {
-			*client_max_window_bits = 15;
+			*client_compression_factor = 15;
 		}
 
-		char* server_max_window_bits = strstr(key_extensions, "server_max_window_bits=");
-		if (server_max_window_bits) {
-			extension_server_max_window_bits = true;
+		char* server_compression_factor = strstr(key_extensions, "server_compression_factor=");
+		if (server_compression_factor) {
+			extension_server_compression_factor = true;
 
-			long int server_max_window_bits_candidate = strtol(server_max_window_bits + sizeof("server_max_window_bits="), NULL, 10);
-			if (server_max_window_bits_candidate >= 8 || server_max_window_bits_candidate <= 15) {
-				*server_max_window_bits = (unsigned char) (server_max_window_bits_candidate & 15);
+			long int server_compression_factor_candidate = strtol(server_compression_factor + sizeof("server_compression_factor="), NULL, 10);
+			if (server_compression_factor_candidate >= 8 || server_compression_factor_candidate <= 15) {
+				*server_compression_factor = (unsigned char) (server_compression_factor_candidate & 15);
 			}
 
-			/* in all other cases, we keep the value in server_max_window_bits */
+			/* in all other cases, we keep the value in server_compression_factor */
 		}
 	} else {
-		*client_max_window_bits = 0;
-		*server_max_window_bits = 0;
+		*client_compression_factor = 0;
+		*server_compression_factor = 0;
 	}
 
 	char extension[128] = { 0 };
 
 	if (extension_permessage_deflate) {
-		if (extension_client_max_window_bits && extension_server_max_window_bits) {
-			snprintf(extension, 128, "Sec-WebSocket-Extensions: permessage-deflate; client_max_window_bits=%d; server_max_window_bits=%d\r\n", *client_max_window_bits, *server_max_window_bits);
-		} else if (extension_client_max_window_bits) {
-			snprintf(extension, 128, "Sec-WebSocket-Extensions: permessage-deflate; client_max_window_bits=%d\r\n", *client_max_window_bits);
-		} else if (extension_server_max_window_bits) {
-			snprintf(extension, 128, "Sec-WebSocket-Extensions: permessage-deflate; server_max_window_bits=%d\r\n", *server_max_window_bits);
+		if (extension_client_compression_factor && extension_server_compression_factor) {
+			snprintf(extension, 128, "Sec-WebSocket-Extensions: permessage-deflate; client_compression_factor=%d; server_compression_factor=%d\r\n", *client_compression_factor, *server_compression_factor);
+		} else if (extension_client_compression_factor) {
+			snprintf(extension, 128, "Sec-WebSocket-Extensions: permessage-deflate; client_compression_factor=%d\r\n", *client_compression_factor);
+		} else if (extension_server_compression_factor) {
+			snprintf(extension, 128, "Sec-WebSocket-Extensions: permessage-deflate; server_compression_factor=%d\r\n", *server_compression_factor);
 		} else {
 			strncpy(extension, "Sec-WebSocket-Extensions: permessage-deflate\r\n", 128);
 		}
