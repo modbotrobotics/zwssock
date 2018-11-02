@@ -1,36 +1,53 @@
 <html>
 <head>
+    <meta charset="utf-8"/>
     <title></title>
-
-    <!--<script src="https://rawgit.com/zeromq/JSMQ/master/JSMQ.js"></script>-->
-    <script src="https://rawgit.com/somdoron/JSMQ/master/JSMQ.js"></script>
-    <!--<script src="C:\git\JSMQ\JSMQ.js"></script>-->
+    <script src="https://cdn.jsdelivr.net/gh/modbotrobotics/JSMQ/src/JSMQ.js"></script>
 
     <script>
         var dealer = new JSMQ.Dealer();
-        dealer.connect("ws://localhost:8000");
+        dealer.connect("ws://localhost:15798");
 
-        // we must wait for the dealer to be connected before we can send messages, any messages we are trying to send
-        // while the dealer is not connected will be dropped
-        dealer.sendReady = function () {
+        // Wait for dealer to connect to router before allowing messages to be sent
+        dealer.sendReady = function() {
             document.getElementById("sendButton").disabled = "";
         };
 
         dealer.onMessage = function (message) {
-            // the response from the server
-            console.log(message.popString());
+            // Callback executed on response received from the server
+            console.log("Received: \""+ message.popString() + "\"");
+            // console.log("Received: \""+ message.popString() + "\",",
+            // message.popInt(),
+            // message.popInt(),
+            // message.popLong(),
+            // message.popLong(),
+            // message.popDouble(),
+            // message.popDouble());
         };
 
         function send() {
             var message = new JSMQ.Message();
-            message.addString("extra frame");
             message.addString(document.getElementById("messageTextBox").value);
+            // message.addString("Hello");
+            // message.addInt(1234);
+            // message.addInt(-1234);
+            // message.addLong(1234567);
+            // message.addLong(-1234567);
+            // message.addDouble(12345678.87654321);
+            // message.addDouble(-12345678.87654321);
+
             dealer.send(message);
+        }
+
+        function onInputKeyPress(e) {
+            var unicode = e.keyCode ? e.keyCode : e.charCode;
+            if (unicode == 13)
+                send();
         }
     </script>
 </head>
 <body>
-    <label>Message:</label><input id="messageTextBox" value="" />
+    <label>Message:</label><input id="messageTextBox" value="" onkeypress="onInputKeyPress(event)"/>
     <button id="sendButton" disabled="disabled" onclick="javascript:send();">
         Send
     </button>
