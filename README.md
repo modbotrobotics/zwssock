@@ -30,4 +30,4 @@ To include the library in your project, use the prebuilt conan package or recipe
 ### Examples
 
 To use the ZWSSock library take a look at [test/c_test.c](https://github.com/modbotrobotics/zwssock/blob/master/test/c_test.c) file.
-The project also includes [browser side example](https://github.com/modbotrobotics/zwssock/blob/master/test/example.html).
+A JSMQ browser-side example is available in the [JSMQ repository](https://github.com/modbotrobotics/JSMQ/blob/master/test/example.html).
