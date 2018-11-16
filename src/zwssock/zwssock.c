@@ -365,6 +365,7 @@ void websocket_close_received(void* tag, byte* payload, int length) {
 		send_close_frame(self->agent->stream);
 		send_empty_frame(self->agent->stream);
 	} else {
+		send_close_frame(self->agent->stream);
 		send_empty_frame(self->agent->stream);
 	}
 }
@@ -440,9 +441,10 @@ static void client_data_read(client_t* self) {
 					free(response);
 
 					if (self->client_compression_factor > 0) {
+						printf("Inflating data with client compression factor %i\n", self->client_compression_factor);
 						int ret = inflateInit2(&self->permessage_deflate_client, -self->client_compression_factor);
 						if (ret != Z_OK) {
-							printf("EXCEPTION: Could not inflate; connection error\n");
+							printf("EXCEPTION: Could not inflate; (%i)\n", ret);
 							self->client_compression_factor = 0;
 							self->state = CONNECTION_EXCEPTION;
 							not_acceptable(self->address, self->agent->stream);
@@ -450,7 +452,7 @@ static void client_data_read(client_t* self) {
 
 						ret = deflateInit2(&self->permessage_deflate_server, Z_DEFAULT_COMPRESSION, Z_DEFLATED, -self->server_compression_factor, 8, Z_DEFAULT_STRATEGY);
 						if (ret != Z_OK) {
-							printf("EXCEPTION: Could not deflate; connection error\n");
+							printf("EXCEPTION: Could not deflate; (%i)\n", ret);
 							self->server_compression_factor = 0;
 							self->state = CONNECTION_EXCEPTION;
 							not_acceptable(self->address, self->agent->stream);

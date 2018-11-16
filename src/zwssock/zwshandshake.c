@@ -263,7 +263,7 @@ bool zwshandshake_parse_request(zwshandshake_t* self, zframe_t* data) {
 			if (c == '\n')
 			{
 				self->state = complete;
-				printf("Handshake:\n\"%s\"\n", request);
+				// printf("Handshake:\n\"%s\"\n", request);
 				free(request);
 				return zwshandshake_validate(self);
 			}
@@ -380,7 +380,7 @@ zframe_t* zwshandshake_get_response(zwshandshake_t* self, unsigned char* client_
 			if (client_factor != NULL) {
 				extension_client_compression_factor = true;
 				*client_compression_factor = 15;
-				printf("   - specified (default to 15)\n");
+				printf("   - Specified (default to 15)\n");
 
 			} else if (client_max_bits != NULL) {
 				char* client_bits_specified = strstr(key_extensions, "client_max_window_bits=");
@@ -388,16 +388,17 @@ zframe_t* zwshandshake_get_response(zwshandshake_t* self, unsigned char* client_
 				if (client_bits_specified) {
 					extension_client_compression_factor = true;
 					*client_compression_factor = 15;
-					printf("   - specified (default to 15)\n");
+					printf("   - Specified (default to 15)\n");
 
 				} else {
-					printf("   - not specified");
-					extension_client_compression_factor = false;
+					printf("   - Specified as 0");
+					extension_client_compression_factor = true;
+					*client_compression_factor = 0;
 				}
 			} else {
 				extension_client_compression_factor = true;
 				*client_compression_factor = 15;
-				printf("   - not specified (default to 15)\n");
+				printf("   - Not specified (default to 15)\n");
 			}
 			printf("\n");
 
