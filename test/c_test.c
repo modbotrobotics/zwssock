@@ -93,6 +93,7 @@ int main(int argc, char** argv) {
 		// zmsg_addmem(res, &double_pos, sizeof(double_pos));
 		// zmsg_addmem(res, &double_neg, sizeof(double_neg));
 
+		printf("Sending message back to client...\n");
 		int rc = zwssock_send(sock, &res);
 		if (rc != 0) {
 			zmsg_destroy(&res);

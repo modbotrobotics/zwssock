@@ -85,6 +85,12 @@ void zwsdecoder_process_buffer(zwsdecoder_t* self, zframe_t* data) {
 	byte* buffer = zframe_data(data);
 	int buffer_length = zframe_size(data);
 
+	printf("   - Processing buffer:");
+	for (int i = 0; i < buffer_length; i++) {
+		printf(" %u, ", buffer[i]);
+	}
+	printf("\n");
+
 	int bytes_to_read;
 
 	while (i < buffer_length) {
@@ -147,6 +153,7 @@ static void zwsdecoder_process_byte(zwsdecoder_t* self, byte b) {
 
 			// not final messages are currently not supported
 			if (!final) {
+				printf("Decoder: unsupported FINAL\n");
 				self->state = STATE_ERROR;
 
 			// Check that the opcode is supported
@@ -154,6 +161,7 @@ static void zwsdecoder_process_byte(zwsdecoder_t* self, byte b) {
 						&& self->opcode != opcode_close
 						&& self->opcode != opcode_ping
 						&& self->opcode != opcode_pong) {
+				printf("Decoder: unsupported OP code\n");
 				self->state = STATE_ERROR;
 			} else {
 				self->state = STATE_SECOND_BYTE;
@@ -210,8 +218,10 @@ static void zwsdecoder_process_byte(zwsdecoder_t* self, byte b) {
 			self->payload_length = 0;
 
 			// must be zero, max message size is MaxInt
-			if (b != 0)
+			if (b != 0) {
+				printf("Decoder: message size exceeded max (MaxInt)\n");
 				self->state = STATE_ERROR;
+			}
 			else
 				self->state = STATE_LONG_SIZE_2;
 
@@ -219,24 +229,30 @@ static void zwsdecoder_process_byte(zwsdecoder_t* self, byte b) {
 
 		case STATE_LONG_SIZE_2:
 			// must be zero, max message size is MaxInt
-			if (b != 0)
+			if (b != 0) {
+				printf("Decoder: message size exceeded max (MaxInt)\n");
 				self->state = STATE_ERROR;
+			}
 			else
 				self->state = STATE_LONG_SIZE_3;
 			break;
 
 		case STATE_LONG_SIZE_3:
 			// must be zero, max message size is MaxInt
-			if (b != 0)
+			if (b != 0) {
+				printf("Decoder: message size exceeded max (MaxInt)\n");
 				self->state = STATE_ERROR;
+			}
 			else
 				self->state = STATE_LONG_SIZE_4;
 			break;
 
 		case STATE_LONG_SIZE_4:
 			// must be zero, max message size is MaxInt
-			if (b != 0)
+			if (b != 0) {
+				printf("Decoder: message size exceeded max (MaxInt)\n");
 				self->state = STATE_ERROR;
+			}
 			else
 				self->state = STATE_LONG_SIZE_5;
 			break;
@@ -268,6 +284,7 @@ static void zwsdecoder_process_byte(zwsdecoder_t* self, byte b) {
 			break;
 
 		case STATE_ERROR:
+			printf("Decoder: error encountered...\n");
 			// UNIMPLEMENTED
 			break;
 	}
@@ -290,21 +307,22 @@ static state_t zwsdecoder_next_state(zwsdecoder_t* self) {
 }
 
 static void invoke_new_message(zwsdecoder_t* self) {
+	printf("Decoding new message - op: %u\n", self->opcode);
 	switch (self->opcode) {
-	case opcode_binary:
-		self->message_cb(self->tag, self->payload, self->payload_length);
-		break;
-	case opcode_close:
-		self->close_cb(self->tag, self->payload, self->payload_length);
-		break;
-	case opcode_ping:
-		self->ping_cb(self->tag, self->payload, self->payload_length);
-		break;
-	case opcode_pong:
-		self->pong_cb(self->tag, self->payload, self->payload_length);
-		break;
-	default:
-		assert(false);
+		case opcode_binary:
+			self->message_cb(self->tag, self->payload, self->payload_length);
+			break;
+		case opcode_close:
+			self->close_cb(self->tag, self->payload, self->payload_length);
+			break;
+		case opcode_ping:
+			self->ping_cb(self->tag, self->payload, self->payload_length);
+			break;
+		case opcode_pong:
+			self->pong_cb(self->tag, self->payload, self->payload_length);
+			break;
+		default:
+			assert(false);
 	}
 
 	if (self->payload != NULL) {
