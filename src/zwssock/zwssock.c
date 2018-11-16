@@ -306,7 +306,7 @@ void zwssock_router_message_received(void* tag, byte* payload, int length) {
 
 	// No decompression needed
 	} else {
-		printf("   - No decompression needed for client data, proceeding...");
+		printf("   - No decompression needed for client data, proceeding...\n");
 		message_continued = (payload[0] == 1);
 		zmsg_addmem(self->outgoing_msg, &payload[1], length - 1);
 	}
@@ -363,10 +363,10 @@ void websocket_close_received(void* tag, byte* payload, int length) {
 
 	if (code == 1000) {
 		send_close_frame(self->agent->stream);
-		send_empty_frame(self->agent->stream);
+		// send_empty_frame(self->agent->stream);
 	} else {
 		send_close_frame(self->agent->stream);
-		send_empty_frame(self->agent->stream);
+		// send_empty_frame(self->agent->stream);
 	}
 }
 

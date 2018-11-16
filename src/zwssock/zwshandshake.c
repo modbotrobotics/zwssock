@@ -392,7 +392,7 @@ zframe_t* zwshandshake_get_response(zwshandshake_t* self, unsigned char* client_
 
 				} else {
 					printf("   - Specified as 0");
-					extension_client_compression_factor = true;
+					extension_client_compression_factor = false;
 					*client_compression_factor = 0;
 				}
 			} else {
