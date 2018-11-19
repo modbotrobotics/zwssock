@@ -237,15 +237,15 @@ void zwssock_router_message_received(void* tag, byte* payload, int length) {
 		zmsg_addstr(self->outgoing_msg, self->hashkey);
 	}
 
-	printf("   - Processing payload:");
-	for (int i = 0; i < length; i++) {
-		printf(" %u, ", payload[i]);
-	}
-	printf("\n");
+	// printf("   - Processing payload:");
+	// for (int i = 0; i < length; i++) {
+	// 	printf(" %u, ", payload[i]);
+	// }
+	// printf("\n");
 
 	// Decompress client data, if compressed
 	if (self->client_compression_factor > 0) {
-		printf("   - Decompressing client data... (compression factor %u)\n", self->client_compression_factor);
+		// printf("   - Decompressing client data... (compression factor %u)\n", self->client_compression_factor);
 		uint8_t* outgoing_data = (uint8_t*)zmalloc(length + 4);
 		bool message_continued_parsed = false;
 
@@ -306,7 +306,7 @@ void zwssock_router_message_received(void* tag, byte* payload, int length) {
 
 	// No decompression needed
 	} else {
-		printf("   - No decompression needed for client data, proceeding...\n");
+		// printf("   - No decompression needed for client data, proceeding...\n");
 		message_continued = (payload[0] == 1);
 		zmsg_addmem(self->outgoing_msg, &payload[1], length - 1);
 	}
@@ -342,23 +342,23 @@ void send_empty_frame(zsock_t* stream) {
  * Callback on WebSocket "close" frame received
 */
 void websocket_close_received(void* tag, byte* payload, int length) {
+	client_t* self = (client_t *)tag;
+	zframe_t* address = zframe_dup(self->address);
+	printf("WebSocket close frame received from endpoint [%s] (%s)\n", zframe_strhex(self->address), zsock_endpoint(self->agent->stream));
+
 	uint16_t code = 0;
 	// First two bytes are a 2 byte unsigned int, code
-	printf("Close frame received");
 	if (length >= 2) {
 		// Network order; big endian
 		code = payload[1] | (uint16_t)payload[0] << 8;
-		printf(" - code: %u", code);
+		printf(" - code: %u\n", code);
 		// Remaining bytes is a UTF-8 encoded string, reason
 		if (length > 2) {
 			char* reason = malloc(sizeof(char) * (length - 2));
 			memcpy(reason, reason + 2, length-2);
-			printf(" - reason: %s", reason);
+			printf(" - reason: \"%s\"\n", reason);
 		}
 	}
-	printf("\n");
-	client_t* self = (client_t *)tag;
-	zframe_t* address = zframe_dup(self->address);
 	zframe_send(&address, self->agent->stream, ZFRAME_MORE);
 
 	if (code == 1000) {
@@ -366,7 +366,7 @@ void websocket_close_received(void* tag, byte* payload, int length) {
 		// send_empty_frame(self->agent->stream);
 	} else {
 		send_close_frame(self->agent->stream);
-		// send_empty_frame(self->agent->stream);
+		send_empty_frame(self->agent->stream);
 	}
 }
 
@@ -399,7 +399,7 @@ void pong_received(void* tag, byte* payload, int length) {
  *
 */
 static void not_acceptable(zframe_t *_address, void* dest) {
-	printf(" - Message not acceptable\n");
+	// printf(" - Message not acceptable\n");
 	zframe_t* address = zframe_dup(_address);
 	zframe_send(&address, dest, ZFRAME_MORE + ZFRAME_REUSE);
 	zstr_send (dest, "HTTP/1.1 406 Not Acceptable\r\n\r\n");
@@ -413,6 +413,7 @@ static void not_acceptable(zframe_t *_address, void* dest) {
  * Read data from WebSocket endpoint client
 */
 static void client_data_read(client_t* self) {
+	// printf("Received data from endpoint [%s] (%s)\n", zframe_strhex(self->address), zsock_endpoint(self->agent->stream));
 	zframe_t* data;
 	zwshandshake_t* handshake;
 
@@ -420,14 +421,15 @@ static void client_data_read(client_t* self) {
 
 	switch (self->state) {
 		case CONNECTION_CLOSED:
-			printf(" - Current state: CLOSED\n");
-			// TODO: We might not have received the entire request, make the zwshandshake able to handle multiple inputs
-
+			// When a connection is established, a zero-length frame will be received by the application
 			if (zframe_size(data) == 0) {
-				printf(" 	- Empty frame...\n");
+				printf("Client [%s] (%s) establishing connection...\n", zframe_strhex(self->address), zsock_endpoint(self->agent->stream));
 				break;
 			}
-			printf(" 	- Inflating data...\n");
+
+			printf(" - Attempting handshake\n");
+			// TODO: We might not have received the entire request, make the zwshandshake able to handle multiple inputs
+			// printf(" 	- Inflating data...\n");
 			handshake = zwshandshake_new();
 			if (zwshandshake_parse_request(handshake, data)) {
 				// request is valid, getting the response
@@ -441,7 +443,7 @@ static void client_data_read(client_t* self) {
 					free(response);
 
 					if (self->client_compression_factor > 0) {
-						printf("Inflating data with client compression factor %i\n", self->client_compression_factor);
+						// printf("Inflating data with client compression factor %i\n", self->client_compression_factor);
 						int ret = inflateInit2(&self->permessage_deflate_client, -self->client_compression_factor);
 						if (ret != Z_OK) {
 							printf("EXCEPTION: Could not inflate; (%i)\n", ret);
@@ -460,7 +462,7 @@ static void client_data_read(client_t* self) {
 					}
 
 					self->decoder = zwsdecoder_new(self, &zwssock_router_message_received, &websocket_close_received, &ping_received, &pong_received);
-					printf(" 	- Handshake successful -- client connected\n");
+					printf(" - Handshake successful -- client connected\n");
 					self->state = CONNECTION_CONNECTED;
 
 				// The request is invalid
@@ -478,7 +480,12 @@ static void client_data_read(client_t* self) {
 			break;
 
 		case CONNECTION_CONNECTED:;
-			printf(" - Current state: CONNECTED\n");
+			// printf(" - Parsing message...\n");
+			if (zframe_size(data) == 0) {
+				printf("Client [%s] (%s) sent empty message...\n", zframe_strhex(self->address), zsock_endpoint(self->agent->stream));
+				websocket_close_received(self, NULL, 0);
+				break;
+			}
 			zwsdecoder_process_buffer(self->decoder, data);
 
 			if (zwsdecoder_is_errored(self->decoder)) {
@@ -488,8 +495,7 @@ static void client_data_read(client_t* self) {
 			break;
 
 		case CONNECTION_EXCEPTION:
-			printf(" - Current state: EXCEPTION\n");
-			// printf("A client connection exception occurred\n");  // DEBUG
+			printf("A client connection exception occurred\n");  // DEBUG
 			// Ignore the message
 			break;
 	}
@@ -694,6 +700,7 @@ static int s_agent_handle_data(agent_t* self) {
 			memcpy(outgoing_data + payload_start_index, zframe_data(received_frame), zframe_size(received_frame));
 			address = zframe_dup(client->address);
 
+			// printf("Sending response to endpoint %s...\n", client->agent->stream);
 			zframe_send(&address, self->stream, ZFRAME_MORE);
 			zframe_t* data = zframe_new(outgoing_data, frame_size);
 			zframe_send(&data, self->stream, 0);

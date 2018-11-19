@@ -270,17 +270,17 @@ bool zwshandshake_parse_request(zwshandshake_t* self, zframe_t* data) {
 			break;
 		case error:
 			free(request);
-			printf("Handshake error\n");
+			// printf("Handshake error\n");
 			return false;
 		default:
-			printf("Handshake default\n");
+			// printf("Handshake default\n");
 			assert(false);
 			free(request);
 			return false;
 		}
 	}
-	printf("Invalid handshake\n");
-	printf("\"%s\"\n", request);
+	// printf("Invalid handshake\n");
+	// printf("\"%s\"\n", request);
 
 	free(request);
 	return false;
@@ -362,17 +362,17 @@ zframe_t* zwshandshake_get_response(zwshandshake_t* self, unsigned char* client_
 	bool extension_server_compression_factor = false;
 
 	char* key_extensions = zhash_lookup(self->header_fields, sec_websocket_extensions_name);
-	printf("Parsing WebSocket extensions...\n");
+	// printf("Parsing WebSocket extensions...\n");
 	if (key_extensions) {
-		printf(" - Specified\n");
-		printf(" - Extensions: %s\n", key_extensions);
+		// printf(" - Specified\n");
+		// printf(" - Extensions: %s\n", key_extensions);
 
 		if(strstr(key_extensions, "permessage-deflate") != NULL &&
 				*client_compression_factor > 0 && *server_compression_factor > 0) {
-			printf(" - Per-message deflate specified...\n");
+			// printf(" - Per-message deflate specified...\n");
 
 			// Parse client compression factor
-			printf(" - Client compression factor...\n");
+			// printf(" - Client compression factor...\n");
 			extension_permessage_deflate = true;
 			char* client_factor = strstr(key_extensions, "client_compression_factor");
 			char* client_max_bits = strstr(key_extensions, "client_max_window_bits");
@@ -380,7 +380,7 @@ zframe_t* zwshandshake_get_response(zwshandshake_t* self, unsigned char* client_
 			if (client_factor != NULL) {
 				extension_client_compression_factor = true;
 				*client_compression_factor = 15;
-				printf("   - Specified (default to 15)\n");
+				// printf("   - Specified (default to 15)\n");
 
 			} else if (client_max_bits != NULL) {
 				char* client_bits_specified = strstr(key_extensions, "client_max_window_bits=");
@@ -388,22 +388,22 @@ zframe_t* zwshandshake_get_response(zwshandshake_t* self, unsigned char* client_
 				if (client_bits_specified) {
 					extension_client_compression_factor = true;
 					*client_compression_factor = 15;
-					printf("   - Specified (default to 15)\n");
+					// printf("   - Specified (default to 15)\n");
 
 				} else {
-					printf("   - Specified as 0");
+					// printf("   - Specified as 0");
 					extension_client_compression_factor = false;
 					*client_compression_factor = 0;
 				}
 			} else {
 				extension_client_compression_factor = true;
 				*client_compression_factor = 15;
-				printf("   - Not specified (default to 15)\n");
+				// printf("   - Not specified (default to 15)\n");
 			}
-			printf("\n");
+			// printf("\n");
 
 			// Parse server compression factor
-			printf(" - Server compression factor...\n");
+			// printf(" - Server compression factor...\n");
 			char* factor_str = strstr(key_extensions, "server_compression_factor=");
 			if (factor_str) {
 				extension_server_compression_factor = true;
@@ -414,14 +414,14 @@ zframe_t* zwshandshake_get_response(zwshandshake_t* self, unsigned char* client_
 				if (server_compression_factor_candidate >= 8 || server_compression_factor_candidate <= 15) {
 					*server_compression_factor = (unsigned char) (server_compression_factor_candidate & 15);
 				}
-				printf("   - Specified (%i)\n", *server_compression_factor);
+				// printf("   - Specified (%i)\n", *server_compression_factor);
 
 			} else {
 				*server_compression_factor = 0;
-				printf("   - Not specified (default to %i)\n", *server_compression_factor);
+				// printf("   - Not specified (default to %i)\n", *server_compression_factor);
 			}
 		} else {
-			printf("   - Not specified\n");
+			// printf("   - Not specified\n");
 			*client_compression_factor = 0;
 			*server_compression_factor = 0;
 		}  // end if (strstr(key_extensions, "permessage-deflate") != NULL)
