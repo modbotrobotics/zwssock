@@ -413,7 +413,6 @@ static void not_acceptable(zframe_t *_address, void* dest) {
  * Read data from WebSocket endpoint client
 */
 static void client_data_read(client_t* self) {
-	// printf("Received data from endpoint [%s] (%s)\n", zframe_strhex(self->address), zsock_endpoint(self->agent->stream));
 	zframe_t* data;
 	zwshandshake_t* handshake;
 
@@ -446,15 +445,18 @@ static void client_data_read(client_t* self) {
 						// printf("Inflating data with client compression factor %i\n", self->client_compression_factor);
 						int ret = inflateInit2(&self->permessage_deflate_client, -self->client_compression_factor);
 						if (ret != Z_OK) {
-							printf("EXCEPTION: Could not inflate; (%i)\n", ret);
+							printf("EXCEPTION: Could not inflate - RC: %i\n", ret);
+							printf("	- Client compression factor: %i\n", -self->client_compression_factor);
 							self->client_compression_factor = 0;
 							self->state = CONNECTION_EXCEPTION;
 							not_acceptable(self->address, self->agent->stream);
 						}
-
-						ret = deflateInit2(&self->permessage_deflate_server, Z_DEFAULT_COMPRESSION, Z_DEFLATED, -self->server_compression_factor, 8, Z_DEFAULT_STRATEGY);
+					}
+					if (self->server_compression_factor > 0) {
+						int ret = deflateInit2(&self->permessage_deflate_server, Z_DEFAULT_COMPRESSION, Z_DEFLATED, -self->server_compression_factor, 8, Z_DEFAULT_STRATEGY);
 						if (ret != Z_OK) {
-							printf("EXCEPTION: Could not deflate; (%i)\n", ret);
+							printf("EXCEPTION: Could not deflate - RC: %i\n", ret);
+							printf("	- Server compression factor: %i\n", -self->server_compression_factor);
 							self->server_compression_factor = 0;
 							self->state = CONNECTION_EXCEPTION;
 							not_acceptable(self->address, self->agent->stream);
@@ -545,11 +547,12 @@ static int s_agent_handle_control(agent_t* self) {
 }
 
 /**
- * Handle messages from the server
+ * Handle messages from the socket
 */
 static int s_agent_handle_router(agent_t* self) {
 	zframe_t* address = zframe_recv(self->stream);
 	char* hashkey = zframe_strhex(address);
+	printf("Received data from endpoint [%s] (%s)\n", hashkey, zsock_endpoint(self->stream));
 	client_t* client = zhash_lookup(self->clients, hashkey);
 	if (client == NULL) {
 		client = zwssock_client_new(self, address);

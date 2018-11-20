@@ -263,7 +263,7 @@ bool zwshandshake_parse_request(zwshandshake_t* self, zframe_t* data) {
 			if (c == '\n')
 			{
 				self->state = complete;
-				// printf("Handshake:\n\"%s\"\n", request);
+				printf("Handshake:\n%s\n", request);
 				free(request);
 				return zwshandshake_validate(self);
 			}
@@ -362,66 +362,71 @@ zframe_t* zwshandshake_get_response(zwshandshake_t* self, unsigned char* client_
 	bool extension_server_compression_factor = false;
 
 	char* key_extensions = zhash_lookup(self->header_fields, sec_websocket_extensions_name);
-	// printf("Parsing WebSocket extensions...\n");
+	printf("Parsing WebSocket extensions...\n");
 	if (key_extensions) {
-		// printf(" - Specified\n");
-		// printf(" - Extensions: %s\n", key_extensions);
+		printf(" - Specified\n");
+		printf(" - Extensions: %s\n", key_extensions);
 
 		if(strstr(key_extensions, "permessage-deflate") != NULL &&
 				*client_compression_factor > 0 && *server_compression_factor > 0) {
-			// printf(" - Per-message deflate specified...\n");
+			printf(" - Per-message deflate specified...\n");
+			extension_permessage_deflate = true;
 
 			// Parse client compression factor
-			// printf(" - Client compression factor...\n");
-			extension_permessage_deflate = true;
 			char* client_factor = strstr(key_extensions, "client_compression_factor");
 			char* client_max_bits = strstr(key_extensions, "client_max_window_bits");
+			printf(" - Client compression factor...\n");
 
 			if (client_factor != NULL) {
+				printf("   - Specified (true)\n");
 				extension_client_compression_factor = true;
+			} else {
+				printf("   - Not specified: (defaulting to 15)\n");
 				*client_compression_factor = 15;
-				// printf("   - Specified (default to 15)\n");
+			}
 
-			} else if (client_max_bits != NULL) {
+			printf(" - Client max bits...\n");
+			if (client_max_bits != NULL) {
 				char* client_bits_specified = strstr(key_extensions, "client_max_window_bits=");
 
 				if (client_bits_specified) {
 					extension_client_compression_factor = true;
 					*client_compression_factor = 15;
-					// printf("   - Specified (default to 15)\n");
+					printf("   - Specified (defaulting to 15)\n");
 
 				} else {
-					// printf("   - Specified as 0");
+					printf("   - Specified as 0\n");
 					extension_client_compression_factor = false;
 					*client_compression_factor = 0;
 				}
 			} else {
-				extension_client_compression_factor = true;
 				*client_compression_factor = 15;
-				// printf("   - Not specified (default to 15)\n");
+				printf("   - Not specified (defaulting to 15)\n");
 			}
-			// printf("\n");
 
 			// Parse server compression factor
-			// printf(" - Server compression factor...\n");
+			printf(" - Server compression factor...\n");
 			char* factor_str = strstr(key_extensions, "server_compression_factor=");
 			if (factor_str) {
 				extension_server_compression_factor = true;
+				printf("   - Specified\n", *server_compression_factor);
 
 				long int server_compression_factor_candidate = strtol(factor_str + sizeof("server_compression_factor="), NULL, 10);
 
 				// Correct compression factor if it is out of bounds
 				if (server_compression_factor_candidate >= 8 || server_compression_factor_candidate <= 15) {
 					*server_compression_factor = (unsigned char) (server_compression_factor_candidate & 15);
+				} else {
+					*server_compression_factor = server_compression_factor_candidate;
 				}
-				// printf("   - Specified (%i)\n", *server_compression_factor);
+				printf("   	- Value: (%i)\n", *server_compression_factor);
 
 			} else {
-				*server_compression_factor = 0;
-				// printf("   - Not specified (default to %i)\n", *server_compression_factor);
+				printf("   - Not specified (false)\n", *server_compression_factor);
+				extension_server_compression_factor = false;
 			}
 		} else {
-			// printf("   - Not specified\n");
+			printf("   - Not specified (client and server compression factors defaulting to 0)\n");
 			*client_compression_factor = 0;
 			*server_compression_factor = 0;
 		}  // end if (strstr(key_extensions, "permessage-deflate") != NULL)
