@@ -3,6 +3,12 @@
 
 #include "zwshandshake.h"
 
+#if ZWS_DEBUG
+  #define ZWS_LOG_DEBUG(x) printf x
+#else
+  #define ZWS_LOG_DEBUG(x) (void)0
+#endif
+
 typedef enum {
 	initial = 0,
 	request_line_G,
@@ -263,24 +269,24 @@ bool zwshandshake_parse_request(zwshandshake_t* self, zframe_t* data) {
 			if (c == '\n')
 			{
 				self->state = complete;
-				printf("Handshake:\n%s\n", request);
+				ZWS_LOG_DEBUG(("Handshake:\n%s\n", request));
 				free(request);
 				return zwshandshake_validate(self);
 			}
 			break;
 		case error:
 			free(request);
-			// printf("Handshake error\n");
+			// ZWS_LOG_DEBUG(("Handshake error\n"));
 			return false;
 		default:
-			// printf("Handshake default\n");
+			// ZWS_LOG_DEBUG(("Handshake default\n"));
 			assert(false);
 			free(request);
 			return false;
 		}
 	}
-	// printf("Invalid handshake\n");
-	// printf("\"%s\"\n", request);
+	// ZWS_LOG_DEBUG(("Invalid handshake\n"));
+	// ZWS_LOG_DEBUG(("\"%s\"\n", request));
 
 	free(request);
 	return false;
@@ -362,54 +368,54 @@ zframe_t* zwshandshake_get_response(zwshandshake_t* self, unsigned char* client_
 	bool extension_server_compression_factor = false;
 
 	char* key_extensions = zhash_lookup(self->header_fields, sec_websocket_extensions_name);
-	printf("Parsing WebSocket extensions...\n");
+	ZWS_LOG_DEBUG(("Parsing WebSocket extensions...\n"));
 	if (key_extensions) {
-		printf(" - Specified\n");
-		printf(" - Extensions: %s\n", key_extensions);
+		ZWS_LOG_DEBUG((" - Specified\n"));
+		ZWS_LOG_DEBUG((" - Extensions: %s\n", key_extensions));
 
 		if(strstr(key_extensions, "permessage-deflate") != NULL &&
 				*client_compression_factor > 0 && *server_compression_factor > 0) {
-			printf(" - Per-message deflate specified...\n");
+			ZWS_LOG_DEBUG((" - Per-message deflate specified...\n"));
 			extension_permessage_deflate = true;
 
 			// Parse client compression factor
 			char* client_factor = strstr(key_extensions, "client_compression_factor");
 			char* client_max_bits = strstr(key_extensions, "client_max_window_bits");
-			printf(" - Client compression factor...\n");
+			ZWS_LOG_DEBUG((" - Client compression factor...\n"));
 
 			if (client_factor != NULL) {
-				printf("   - Specified (true)\n");
+				ZWS_LOG_DEBUG(("   - Specified (true)\n"));
 				extension_client_compression_factor = true;
 			} else {
-				printf("   - Not specified: (defaulting to 15)\n");
+				ZWS_LOG_DEBUG(("   - Not specified: (defaulting to 15)\n"));
 				*client_compression_factor = 15;
 			}
 
-			printf(" - Client max bits...\n");
+			ZWS_LOG_DEBUG((" - Client max bits...\n"));
 			if (client_max_bits != NULL) {
 				char* client_bits_specified = strstr(key_extensions, "client_max_window_bits=");
 
 				if (client_bits_specified) {
 					extension_client_compression_factor = true;
 					*client_compression_factor = 15;
-					printf("   - Specified (defaulting to 15)\n");
+					ZWS_LOG_DEBUG(("   - Specified (defaulting to 15)\n"));
 
 				} else {
-					printf("   - Specified as 0\n");
+					ZWS_LOG_DEBUG(("   - Specified as 0\n"));
 					extension_client_compression_factor = false;
 					*client_compression_factor = 0;
 				}
 			} else {
 				*client_compression_factor = 15;
-				printf("   - Not specified (defaulting to 15)\n");
+				ZWS_LOG_DEBUG(("   - Not specified (defaulting to 15)\n"));
 			}
 
 			// Parse server compression factor
-			printf(" - Server compression factor...\n");
+			ZWS_LOG_DEBUG((" - Server compression factor...\n"));
 			char* factor_str = strstr(key_extensions, "server_compression_factor=");
 			if (factor_str) {
 				extension_server_compression_factor = true;
-				printf("   - Specified\n", *server_compression_factor);
+				ZWS_LOG_DEBUG(("   - Specified\n", *server_compression_factor));
 
 				long int server_compression_factor_candidate = strtol(factor_str + sizeof("server_compression_factor="), NULL, 10);
 
@@ -419,14 +425,14 @@ zframe_t* zwshandshake_get_response(zwshandshake_t* self, unsigned char* client_
 				} else {
 					*server_compression_factor = server_compression_factor_candidate;
 				}
-				printf("   	- Value: (%i)\n", *server_compression_factor);
+				ZWS_LOG_DEBUG(("   	- Value: (%i)\n", *server_compression_factor));
 
 			} else {
-				printf("   - Not specified (false)\n", *server_compression_factor);
+				ZWS_LOG_DEBUG(("   - Not specified (false)\n", *server_compression_factor));
 				extension_server_compression_factor = false;
 			}
 		} else {
-			printf("   - Not specified (client and server compression factors defaulting to 0)\n");
+			ZWS_LOG_DEBUG(("   - Not specified (client and server compression factors defaulting to 0)\n"));
 			*client_compression_factor = 0;
 			*server_compression_factor = 0;
 		}  // end if (strstr(key_extensions, "permessage-deflate") != NULL)
@@ -436,11 +442,11 @@ zframe_t* zwshandshake_get_response(zwshandshake_t* self, unsigned char* client_
 
 	if (extension_permessage_deflate) {
 		if (extension_client_compression_factor && extension_server_compression_factor) {
-			snprintf(extension, 128, "Sec-WebSocket-Extensions: permessage-deflate; client_compression_factor=%d; server_compression_factor=%d\r\n", *client_compression_factor, *server_compression_factor);
+			snprintf(extension, 128, "Sec-WebSocket-Extensions: permessage-deflate); client_compression_factor=%d; server_compression_factor=%d\r\n", *client_compression_factor, *server_compression_factor);
 		} else if (extension_client_compression_factor) {
-			snprintf(extension, 128, "Sec-WebSocket-Extensions: permessage-deflate; client_compression_factor=%d\r\n", *client_compression_factor);
+			snprintf(extension, 128, "Sec-WebSocket-Extensions: permessage-deflate); client_compression_factor=%d\r\n", *client_compression_factor);
 		} else if (extension_server_compression_factor) {
-			snprintf(extension, 128, "Sec-WebSocket-Extensions: permessage-deflate; server_compression_factor=%d\r\n", *server_compression_factor);
+			snprintf(extension, 128, "Sec-WebSocket-Extensions: permessage-deflate); server_compression_factor=%d\r\n", *server_compression_factor);
 		} else {
 			strncpy(extension, "Sec-WebSocket-Extensions: permessage-deflate\r\n", 128);
 		}
