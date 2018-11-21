@@ -384,26 +384,26 @@ zframe_t* zwshandshake_get_response(zwshandshake_t* self, unsigned char* client_
 			ZWS_LOG_DEBUG((" - Client compression factor...\n"));
 
 			if (client_factor != NULL) {
-				ZWS_LOG_DEBUG(("   - Specified (true)\n"));
 				extension_client_compression_factor = true;
+				ZWS_LOG_DEBUG(("   - Value specified (defaulting to previous, %i)\n", *client_compression_factor));
 			} else {
-				ZWS_LOG_DEBUG(("   - Not specified: (defaulting to 15)\n"));
 				*client_compression_factor = 15;
+				ZWS_LOG_DEBUG(("   - Value not specified: (defaulting to 15)\n"));
 			}
 
-			ZWS_LOG_DEBUG((" - Client max bits...\n"));
+			ZWS_LOG_DEBUG((" - Client max window bits...\n"));
 			if (client_max_bits != NULL) {
 				char* client_bits_specified = strstr(key_extensions, "client_max_window_bits=");
 
 				if (client_bits_specified) {
 					extension_client_compression_factor = true;
 					*client_compression_factor = 15;
-					ZWS_LOG_DEBUG(("   - Specified (defaulting to 15)\n"));
+					ZWS_LOG_DEBUG(("   - Value specified (defaulting to 15)\n"));
 
 				} else {
-					ZWS_LOG_DEBUG(("   - Specified as 0\n"));
 					extension_client_compression_factor = false;
 					*client_compression_factor = 0;
+					ZWS_LOG_DEBUG(("   - Value not specified (defaulting to 0)\n"));
 				}
 			} else {
 				*client_compression_factor = 15;
@@ -415,7 +415,6 @@ zframe_t* zwshandshake_get_response(zwshandshake_t* self, unsigned char* client_
 			char* factor_str = strstr(key_extensions, "server_compression_factor=");
 			if (factor_str) {
 				extension_server_compression_factor = true;
-				ZWS_LOG_DEBUG(("   - Specified\n", *server_compression_factor));
 
 				long int server_compression_factor_candidate = strtol(factor_str + sizeof("server_compression_factor="), NULL, 10);
 
@@ -425,10 +424,10 @@ zframe_t* zwshandshake_get_response(zwshandshake_t* self, unsigned char* client_
 				} else {
 					*server_compression_factor = server_compression_factor_candidate;
 				}
-				ZWS_LOG_DEBUG(("   	- Value: (%i)\n", *server_compression_factor));
+				ZWS_LOG_DEBUG(("   - Value specified (%i)\n", *server_compression_factor));
 
 			} else {
-				ZWS_LOG_DEBUG(("   - Not specified (false)\n", *server_compression_factor));
+				ZWS_LOG_DEBUG(("   - Value not specified (defaulting to previous, %i)\n", *server_compression_factor));
 				extension_server_compression_factor = false;
 			}
 		} else {

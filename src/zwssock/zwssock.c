@@ -201,6 +201,8 @@ static void zwssock_client_destroy(client_t** self_p) {
 	assert(self_p);
 	if (*self_p) {
 		client_t* self = *self_p;
+		ZWS_LOG_DEBUG(("Destroying client [%s]\n", self->hashkey));
+	
 		zframe_destroy(&self->address);
 
 		if (self->decoder != NULL) {
@@ -326,61 +328,78 @@ void zwssock_router_message_received(void* tag, byte* payload, int length) {
 
 /**
  * Send an empty ZeroMQ frame
- * 
+ *
  * Used for closing ZMQ_STREAM sockets
 */
-void send_close_frame(zsock_t* stream) {
-	ZWS_LOG_DEBUG(("- Sending close frame\n"));
+void send_close_frame(void* tag) {
 	uint8_t op = 8;
+	client_t* self = (client_t*)tag;
+	zframe_t* address = zframe_dup(self->address);
 	zframe_t* close = zframe_new(&op, 1);
-	zframe_send(&close, stream, 0);
+
+	zframe_send(&address, self->agent->stream, ZFRAME_MORE);
+	zframe_send(&close, self->agent->stream, 0);
+	ZWS_LOG_DEBUG((" - Sent close frame to endpoint [%s] (%s)\n", self->hashkey, zsock_endpoint(self->agent->stream)));
 }
 
 /**
  * Send a websocket close frame
 */
-void send_empty_frame(zsock_t* stream) {
-	ZWS_LOG_DEBUG(("- Sending empty frame\n"));
+void send_empty_frame(void* tag) {
+	client_t* self = (client_t*)tag;
+	zframe_t* address = zframe_dup(self->address);
 	zframe_t* empty = zframe_new_empty();
-	zframe_send(&empty, stream, 0);
+
+	zframe_send(&address, self->agent->stream, ZFRAME_MORE);
+	zframe_send(&empty, self->agent->stream, 0);
+	ZWS_LOG_DEBUG((" - Sent empty frame to endpoint [%s] (%s)\n", self->hashkey, zsock_endpoint(self->agent->stream)));
+}
+
+void websocket_close(void* tag) {
+	client_t* self = (client_t *)tag;
+	zframe_t* address = zframe_dup(self->address);
+
+	ZWS_LOG_DEBUG(("Closing WebSocket endpoint [%s] (%s)\n", self->hashkey, zsock_endpoint(self->agent->stream)));
+
+	// send_close_frame(self);
+	send_empty_frame(self);
 }
 
 /**
  * Callback on WebSocket "close" frame received
 */
 void websocket_close_received(void* tag, byte* payload, int length) {
-	client_t* self = (client_t *)tag;
+	client_t* self = (client_t*)tag;
 	zframe_t* address = zframe_dup(self->address);
-	ZWS_LOG_DEBUG(("WebSocket close frame received from endpoint [%s] (%s)\n", zframe_strhex(self->address), zsock_endpoint(self->agent->stream)));
 
 	uint16_t code = 0;
+	char* reason;
 	// First two bytes are a 2 byte unsigned int, code
 	if (length >= 2) {
-		// Network order; big endian
-		code = payload[1] | (uint16_t)payload[0] << 8;
-		ZWS_LOG_DEBUG((" - code: %u\n", code));
+		code = payload[1] | (uint16_t)payload[0] << 8;  // Network order; big endian
 		// Remaining bytes is a UTF-8 encoded string, reason
 		if (length > 2) {
-			char* reason = malloc(sizeof(char) * (length - 2));
-			memcpy(reason, reason + 2, length-2);
-			ZWS_LOG_DEBUG((" - reason: \"%s\"\n", reason));
+
+			reason = malloc(sizeof(char) * (length - 2));
+			memcpy(reason, payload + 2, length-2);
 		}
 	}
-	zframe_send(&address, self->agent->stream, ZFRAME_MORE);
 
-	if (code == 1000) {
-		send_close_frame(self->agent->stream);
-		// send_empty_frame(self->agent->stream);
-	} else {
-		send_close_frame(self->agent->stream);
-		send_empty_frame(self->agent->stream);
-	}
+	ZWS_LOG_DEBUG(("WebSocket close frame received from endpoint [%s] (%s)\n", self->hashkey, zsock_endpoint(self->agent->stream)));
+	if (length >= 2)
+		ZWS_LOG_DEBUG((" - code: %u\n", code));
+	if (reason != NULL)
+		ZWS_LOG_DEBUG((" - reason: (%u) \"%s\"\n", length - 2, reason));
+	
+	websocket_close(tag);
 }
 
 /**
  * WebSocket "ping" frame received.
 */
 void ping_received(void* tag, byte* payload, int length) {
+	ZWS_LOG_DEBUG(("Ping received"));
+
 	client_t* self = (client_t *)tag;
 
 	byte* pong = (byte*)zmalloc(2 + length);
@@ -400,6 +419,7 @@ void ping_received(void* tag, byte* payload, int length) {
 */
 void pong_received(void* tag, byte* payload, int length) {
 	// TOOD: implement pong
+	ZWS_LOG_DEBUG(("Pong received"));
 }
 
 /**
@@ -423,13 +443,15 @@ static void client_data_read(client_t* self) {
 	zframe_t* data;
 	zwshandshake_t* handshake;
 
+	ZWS_LOG_DEBUG((" - Reading data from endpoint [%s] (%s), state: %i\n", self->hashkey, zsock_endpoint(self->agent->stream), self->state));
+
 	data = zframe_recv(self->agent->stream);
 
 	switch (self->state) {
 		case CONNECTION_CLOSED:
 			// When a connection is established, a zero-length frame will be received by the application
 			if (zframe_size(data) == 0) {
-				ZWS_LOG_DEBUG(("Client [%s] (%s) establishing connection...\n", zframe_strhex(self->address), zsock_endpoint(self->agent->stream)));
+				ZWS_LOG_DEBUG(("Client [%s] (%s) establishing connection...\n", self->hashkey, zsock_endpoint(self->agent->stream)));
 				break;
 			}
 
@@ -491,8 +513,8 @@ static void client_data_read(client_t* self) {
 		case CONNECTION_CONNECTED:;
 			// ZWS_LOG_DEBUG((" - Parsing message...\n"));
 			if (zframe_size(data) == 0) {
-				ZWS_LOG_DEBUG(("Client [%s] (%s) sent empty message...\n", zframe_strhex(self->address), zsock_endpoint(self->agent->stream)));
-				websocket_close_received(self, NULL, 0);
+				ZWS_LOG_DEBUG(("Client [%s] (%s) sent empty frame; closing connection...\n", self->hashkey, zsock_endpoint(self->agent->stream)));
+				self->state = CONNECTION_EXCEPTION;
 				break;
 			}
 			zwsdecoder_process_buffer(self->decoder, data);
@@ -504,7 +526,7 @@ static void client_data_read(client_t* self) {
 			break;
 
 		case CONNECTION_EXCEPTION:
-			ZWS_LOG_DEBUG(("A client connection exception occurred\n"));  // DEBUG
+			ZWS_LOG_DEBUG(("Client [%s] exception...\n", self->hashkey));
 			// Ignore the message
 			break;
 	}
@@ -559,7 +581,7 @@ static int s_agent_handle_control(agent_t* self) {
 static int s_agent_handle_router(agent_t* self) {
 	zframe_t* address = zframe_recv(self->stream);
 	char* hashkey = zframe_strhex(address);
-	ZWS_LOG_DEBUG(("Received data from endpoint [%s] (%s)\n", hashkey, zsock_endpoint(self->stream)));
+	// ZWS_LOG_DEBUG(("Received data from endpoint [%s] (%s)\n", hashkey, zsock_endpoint(self->stream)));
 	client_t* client = zhash_lookup(self->clients, hashkey);
 	if (client == NULL) {
 		client = zwssock_client_new(self, address);
