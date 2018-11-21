@@ -377,19 +377,19 @@ void websocket_close_received(void* tag, byte* payload, int length) {
 	// First two bytes are a 2 byte unsigned int, code
 	if (length >= 2) {
 		code = payload[1] | (uint16_t)payload[0] << 8;  // Network order; big endian
+		length = length - 2;
 		// Remaining bytes is a UTF-8 encoded string, reason
 		if (length > 2) {
-
 			reason = malloc(sizeof(char) * (length - 2));
-			memcpy(reason, payload + 2, length-2);
+			memcpy(reason, payload + 2, length - 2);
 		}
 	}
 
 	ZWS_LOG_DEBUG(("WebSocket close frame received from endpoint [%s] (%s)\n", self->hashkey, zsock_endpoint(self->agent->stream)));
 	if (length >= 2)
 		ZWS_LOG_DEBUG((" - code: %u\n", code));
-	if (reason != NULL)
-		ZWS_LOG_DEBUG((" - reason: (%u) \"%s\"\n", length - 2, reason));
+	if (length > 2)
+		ZWS_LOG_DEBUG((" - reason: \"%s\"\n", reason));
 	
 	websocket_close(tag);
 }
@@ -442,8 +442,6 @@ static void not_acceptable(zframe_t *_address, void* dest) {
 static void client_data_read(client_t* self) {
 	zframe_t* data;
 	zwshandshake_t* handshake;
-
-	ZWS_LOG_DEBUG((" - Reading data from endpoint [%s] (%s), state: %i\n", self->hashkey, zsock_endpoint(self->agent->stream), self->state));
 
 	data = zframe_recv(self->agent->stream);
 

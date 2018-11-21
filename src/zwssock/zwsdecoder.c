@@ -307,7 +307,6 @@ static state_t zwsdecoder_next_state(zwsdecoder_t* self) {
 }
 
 static void invoke_new_message(zwsdecoder_t* self) {
-	printf("Decoding new message - opcode: %u\n", self->opcode);
 	switch (self->opcode) {
 		case opcode_binary:
 			self->message_cb(self->tag, self->payload, self->payload_length);
