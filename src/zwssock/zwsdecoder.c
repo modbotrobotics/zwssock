@@ -86,9 +86,9 @@ void zwsdecoder_process_buffer(zwsdecoder_t* self, zframe_t* data) {
 	int buffer_length = zframe_size(data);
 
 	// printf("   - Processing buffer:");
-	for (int i = 0; i < buffer_length; i++) {
-		// printf(" %u, ", buffer[i]);
-	}
+	// for (int i = 0; i < buffer_length; i++) {
+	// 	printf(" %u, ", buffer[i]);
+	// }
 	// printf("\n");
 
 	int bytes_to_read;

@@ -327,22 +327,6 @@ void zwssock_router_message_received(void* tag, byte* payload, int length) {
 }
 
 /**
- * Send an empty ZeroMQ frame
- *
- * Used for closing ZMQ_STREAM sockets
-*/
-void send_close_frame(void* tag) {
-	uint8_t op = 8;
-	client_t* self = (client_t*)tag;
-	zframe_t* address = zframe_dup(self->address);
-	zframe_t* close = zframe_new(&op, 1);
-
-	zframe_send(&address, self->agent->stream, ZFRAME_MORE);
-	zframe_send(&close, self->agent->stream, 0);
-	ZWS_LOG_DEBUG((" - Sent close frame to endpoint [%s] (%s)\n", self->hashkey, zsock_endpoint(self->agent->stream)));
-}
-
-/**
  * Send a websocket close frame
 */
 void send_empty_frame(void* tag) {
@@ -361,8 +345,8 @@ void websocket_close(void* tag) {
 
 	ZWS_LOG_DEBUG(("Closing WebSocket endpoint [%s] (%s)\n", self->hashkey, zsock_endpoint(self->agent->stream)));
 
-	// send_close_frame(self);
 	send_empty_frame(self);
+	self->state = CONNECTION_EXCEPTION;
 }
 
 /**
