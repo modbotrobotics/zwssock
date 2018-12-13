@@ -3,11 +3,6 @@
 
 #include "zwshandshake.h"
 
-#if ZWS_DEBUG
-  #define ZWS_LOG_DEBUG(x) printf x
-#else
-  #define ZWS_LOG_DEBUG(x) (void)0
-#endif
 
 typedef enum {
 	initial = 0,
@@ -269,24 +264,19 @@ bool zwshandshake_parse_request(zwshandshake_t* self, zframe_t* data) {
 			if (c == '\n')
 			{
 				self->state = complete;
-				ZWS_LOG_DEBUG(("Handshake:\n%s\n", request));
 				free(request);
 				return zwshandshake_validate(self);
 			}
 			break;
 		case error:
 			free(request);
-			// ZWS_LOG_DEBUG(("Handshake error\n"));
 			return false;
 		default:
-			// ZWS_LOG_DEBUG(("Handshake default\n"));
 			assert(false);
 			free(request);
 			return false;
 		}
 	}
-	// ZWS_LOG_DEBUG(("Invalid handshake\n"));
-	// ZWS_LOG_DEBUG(("\"%s\"\n", request));
 
 	free(request);
 	return false;
@@ -368,50 +358,38 @@ zframe_t* zwshandshake_get_response(zwshandshake_t* self, unsigned char* client_
 	bool extension_server_compression_factor = false;
 
 	char* key_extensions = zhash_lookup(self->header_fields, sec_websocket_extensions_name);
-	ZWS_LOG_DEBUG(("Parsing WebSocket extensions...\n"));
 	if (key_extensions) {
-		ZWS_LOG_DEBUG((" - Specified\n"));
-		ZWS_LOG_DEBUG((" - Extensions: %s\n", key_extensions));
 
 		if(strstr(key_extensions, "permessage-deflate") != NULL &&
 				*client_compression_factor > 0 && *server_compression_factor > 0) {
-			ZWS_LOG_DEBUG((" - Per-message deflate specified...\n"));
 			extension_permessage_deflate = true;
 
 			// Parse client compression factor
 			char* client_factor = strstr(key_extensions, "client_compression_factor");
 			char* client_max_bits = strstr(key_extensions, "client_max_window_bits");
-			ZWS_LOG_DEBUG((" - Client compression factor...\n"));
 
 			if (client_factor != NULL) {
 				extension_client_compression_factor = true;
-				ZWS_LOG_DEBUG(("   - Value specified (defaulting to previous, %i)\n", *client_compression_factor));
 			} else {
 				*client_compression_factor = 15;
-				ZWS_LOG_DEBUG(("   - Value not specified: (defaulting to 15)\n"));
 			}
 
-			ZWS_LOG_DEBUG((" - Client max window bits...\n"));
 			if (client_max_bits != NULL) {
 				char* client_bits_specified = strstr(key_extensions, "client_max_window_bits=");
 
 				if (client_bits_specified) {
 					extension_client_compression_factor = true;
 					*client_compression_factor = 15;
-					ZWS_LOG_DEBUG(("   - Value specified (defaulting to 15)\n"));
 
 				} else {
 					extension_client_compression_factor = false;
 					*client_compression_factor = 0;
-					ZWS_LOG_DEBUG(("   - Value not specified (defaulting to 0)\n"));
 				}
 			} else {
 				*client_compression_factor = 15;
-				ZWS_LOG_DEBUG(("   - Not specified (defaulting to 15)\n"));
 			}
 
 			// Parse server compression factor
-			ZWS_LOG_DEBUG((" - Server compression factor...\n"));
 			char* factor_str = strstr(key_extensions, "server_compression_factor=");
 			if (factor_str) {
 				extension_server_compression_factor = true;
@@ -424,14 +402,11 @@ zframe_t* zwshandshake_get_response(zwshandshake_t* self, unsigned char* client_
 				} else {
 					*server_compression_factor = server_compression_factor_candidate;
 				}
-				ZWS_LOG_DEBUG(("   - Value specified (%i)\n", *server_compression_factor));
 
 			} else {
-				ZWS_LOG_DEBUG(("   - Value not specified (defaulting to previous, %i)\n", *server_compression_factor));
 				extension_server_compression_factor = false;
 			}
 		} else {
-			ZWS_LOG_DEBUG(("   - Not specified (client and server compression factors defaulting to 0)\n"));
 			*client_compression_factor = 0;
 			*server_compression_factor = 0;
 		}  // end if (strstr(key_extensions, "permessage-deflate") != NULL)
