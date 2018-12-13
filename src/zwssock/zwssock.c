@@ -246,15 +246,8 @@ void zwssock_router_message_received(void* tag, byte* payload, int length) {
 		zmsg_addstr(self->outgoing_msg, self->hashkey);
 	}
 
-	// ZWS_LOG_DEBUG(("   - Processing payload:"));
-	// for (int i = 0; i < length; i++) {
-	// 	ZWS_LOG_DEBUG((" %u, ", payload[i]));
-	// }
-	// ZWS_LOG_DEBUG(("\n"));
-
 	// Decompress client data, if compressed
 	if (self->client_compression_factor > 0) {
-		// ZWS_LOG_DEBUG(("   - Decompressing client data... (compression factor %u)\n", self->client_compression_factor));
 		uint8_t* outgoing_data = (uint8_t*)zmalloc(length + 4);
 		bool message_continued_parsed = false;
 
@@ -287,7 +280,6 @@ void zwssock_router_message_received(void* tag, byte* payload, int length) {
 					zmsg_destroy(&self->outgoing_msg);
 
 					/* Close the client connection */
-					ZWS_LOG_DEBUG(("EXCEPTION: z data / memory error (%i)\n", rc));
 					self->state = CONNECTION_EXCEPTION;
 					zframe_t* address = zframe_dup(self->address);
 					zframe_send(&address, self->agent->stream, ZFRAME_MORE);
@@ -315,7 +307,6 @@ void zwssock_router_message_received(void* tag, byte* payload, int length) {
 
 	// No decompression needed
 	} else {
-		// ZWS_LOG_DEBUG(("   - No decompression needed for client data, proceeding...\n"));
 		message_continued = (payload[0] == 1);
 		zmsg_addmem(self->outgoing_msg, &payload[1], length - 1);
 	}
@@ -336,7 +327,6 @@ void send_empty_frame(void* tag) {
 
 	zframe_send(&address, self->agent->stream, ZFRAME_MORE);
 	zframe_send(&empty, self->agent->stream, 0);
-	ZWS_LOG_DEBUG((" - Sent empty frame to endpoint [%s] (%s)\n", self->hashkey, zsock_endpoint(self->agent->stream)));
 }
 
 void websocket_close(void* tag) {
@@ -382,7 +372,7 @@ void websocket_close_received(void* tag, byte* payload, int length) {
  * WebSocket "ping" frame received.
 */
 void ping_received(void* tag, byte* payload, int length) {
-	ZWS_LOG_DEBUG(("Ping received"));
+	ZWS_LOG_DEBUG(("Ping received\n"));
 
 	client_t* self = (client_t *)tag;
 
@@ -403,14 +393,13 @@ void ping_received(void* tag, byte* payload, int length) {
 */
 void pong_received(void* tag, byte* payload, int length) {
 	// TOOD: implement pong
-	ZWS_LOG_DEBUG(("Pong received"));
+	ZWS_LOG_DEBUG(("Pong received\n"));
 }
 
 /**
  *
 */
 static void not_acceptable(zframe_t *_address, void* dest) {
-	// ZWS_LOG_DEBUG((" - Message not acceptable\n"));
 	zframe_t* address = zframe_dup(_address);
 	zframe_send(&address, dest, ZFRAME_MORE + ZFRAME_REUSE);
 	zstr_send (dest, "HTTP/1.1 406 Not Acceptable\r\n\r\n");
@@ -437,9 +426,7 @@ static void client_data_read(client_t* self) {
 				break;
 			}
 
-			ZWS_LOG_DEBUG((" - Attempting handshake\n"));
 			// TODO: We might not have received the entire request, make the zwshandshake able to handle multiple inputs
-			// ZWS_LOG_DEBUG((" 	- Inflating data...\n"));
 			handshake = zwshandshake_new();
 			if (zwshandshake_parse_request(handshake, data)) {
 				// request is valid, getting the response
@@ -453,11 +440,9 @@ static void client_data_read(client_t* self) {
 					free(response);
 
 					if (self->client_compression_factor > 0) {
-						// ZWS_LOG_DEBUG(("Inflating data with client compression factor %i\n", self->client_compression_factor));
 						int ret = inflateInit2(&self->permessage_deflate_client, -self->client_compression_factor);
 						if (ret != Z_OK) {
 							ZWS_LOG_DEBUG(("EXCEPTION: Could not inflate - RC: %i\n", ret));
-							ZWS_LOG_DEBUG(("	- Client compression factor: %i\n", -self->client_compression_factor));
 							self->client_compression_factor = 0;
 							self->state = CONNECTION_EXCEPTION;
 							not_acceptable(self->address, self->agent->stream);
@@ -467,7 +452,6 @@ static void client_data_read(client_t* self) {
 						int ret = deflateInit2(&self->permessage_deflate_server, Z_DEFAULT_COMPRESSION, Z_DEFLATED, -self->server_compression_factor, 8, Z_DEFAULT_STRATEGY);
 						if (ret != Z_OK) {
 							ZWS_LOG_DEBUG(("EXCEPTION: Could not deflate - RC: %i\n", ret));
-							ZWS_LOG_DEBUG(("	- Server compression factor: %i\n", -self->server_compression_factor));
 							self->server_compression_factor = 0;
 							self->state = CONNECTION_EXCEPTION;
 							not_acceptable(self->address, self->agent->stream);
@@ -493,7 +477,6 @@ static void client_data_read(client_t* self) {
 			break;
 
 		case CONNECTION_CONNECTED:;
-			// ZWS_LOG_DEBUG((" - Parsing message...\n"));
 			if (zframe_size(data) == 0) {
 				ZWS_LOG_DEBUG(("Client [%s] (%s) sent empty frame; closing connection...\n", self->hashkey, zsock_endpoint(self->agent->stream)));
 				self->state = CONNECTION_EXCEPTION;
@@ -563,7 +546,6 @@ static int s_agent_handle_control(agent_t* self) {
 static int s_agent_handle_router(agent_t* self) {
 	zframe_t* address = zframe_recv(self->stream);
 	char* hashkey = zframe_strhex(address);
-	// ZWS_LOG_DEBUG(("Received data from endpoint [%s] (%s)\n", hashkey, zsock_endpoint(self->stream)));
 	client_t* client = zhash_lookup(self->clients, hashkey);
 	if (client == NULL) {
 		client = zwssock_client_new(self, address);
@@ -576,7 +558,6 @@ static int s_agent_handle_router(agent_t* self) {
 
 	//  If client is misbehaving, remove it
 	if (client->state == CONNECTION_EXCEPTION) {
-		ZWS_LOG_DEBUG(("EXCEPTION: Removing client %s\n", hashkey));
 		zhash_delete(self->clients, client->hashkey);
 	}
 	zframe_destroy(&address);
@@ -714,7 +695,6 @@ static int s_agent_handle_data(agent_t* self) {
 			memcpy(outgoing_data + payload_start_index, zframe_data(received_frame), zframe_size(received_frame));
 			address = zframe_dup(client->address);
 
-			// ZWS_LOG_DEBUG(("Sending response to endpoint %s...\n", client->agent->stream));
 			zframe_send(&address, self->stream, ZFRAME_MORE);
 			zframe_t* data = zframe_new(outgoing_data, frame_size);
 			zframe_send(&data, self->stream, 0);
