@@ -1,5 +1,6 @@
 #include "zwsdecoder.h"
 
+
 typedef enum {
 	opcode_continuation		= 0,
 	opcode_text 					= 0x01,
@@ -49,10 +50,12 @@ struct _zwsdecoder_t {
 	pong_callback_t pong_cb;
 };
 
+
 // Private methods
 static void invoke_new_message(zwsdecoder_t* self);
 static state_t zwsdecoder_next_state(zwsdecoder_t* self);
 static void zwsdecoder_process_byte(zwsdecoder_t* self, byte b);
+
 
 zwsdecoder_t* zwsdecoder_new(
 		void* tag,
@@ -84,7 +87,6 @@ void zwsdecoder_process_buffer(zwsdecoder_t* self, zframe_t* data) {
 
 	byte* buffer = zframe_data(data);
 	int buffer_length = zframe_size(data);
-
 	int bytes_to_read;
 
 	while (i < buffer_length) {
@@ -210,8 +212,9 @@ static void zwsdecoder_process_byte(zwsdecoder_t* self, byte b) {
 			self->payload_length = 0;
 
 			// must be zero, max message size is MaxInt
-			if (b != 0)
+			if (b != 0) {
 				self->state = STATE_ERROR;
+			}
 			else
 				self->state = STATE_LONG_SIZE_2;
 
@@ -219,24 +222,27 @@ static void zwsdecoder_process_byte(zwsdecoder_t* self, byte b) {
 
 		case STATE_LONG_SIZE_2:
 			// must be zero, max message size is MaxInt
-			if (b != 0)
+			if (b != 0) {
 				self->state = STATE_ERROR;
+			}
 			else
 				self->state = STATE_LONG_SIZE_3;
 			break;
 
 		case STATE_LONG_SIZE_3:
 			// must be zero, max message size is MaxInt
-			if (b != 0)
+			if (b != 0) {
 				self->state = STATE_ERROR;
+			}
 			else
 				self->state = STATE_LONG_SIZE_4;
 			break;
 
 		case STATE_LONG_SIZE_4:
 			// must be zero, max message size is MaxInt
-			if (b != 0)
+			if (b != 0) {
 				self->state = STATE_ERROR;
+			}
 			else
 				self->state = STATE_LONG_SIZE_5;
 			break;
@@ -291,20 +297,20 @@ static state_t zwsdecoder_next_state(zwsdecoder_t* self) {
 
 static void invoke_new_message(zwsdecoder_t* self) {
 	switch (self->opcode) {
-	case opcode_binary:
-		self->message_cb(self->tag, self->payload, self->payload_length);
-		break;
-	case opcode_close:
-		self->close_cb(self->tag, self->payload, self->payload_length);
-		break;
-	case opcode_ping:
-		self->ping_cb(self->tag, self->payload, self->payload_length);
-		break;
-	case opcode_pong:
-		self->pong_cb(self->tag, self->payload, self->payload_length);
-		break;
-	default:
-		assert(false);
+		case opcode_binary:
+			self->message_cb(self->tag, self->payload, self->payload_length);
+			break;
+		case opcode_close:
+			self->close_cb(self->tag, self->payload, self->payload_length);
+			break;
+		case opcode_ping:
+			self->ping_cb(self->tag, self->payload, self->payload_length);
+			break;
+		case opcode_pong:
+			self->pong_cb(self->tag, self->payload, self->payload_length);
+			break;
+		default:
+			assert(false);
 	}
 
 	if (self->payload != NULL) {

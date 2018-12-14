@@ -6,6 +6,13 @@
 #include <string.h>
 #include <zlib.h>
 
+#define ZWS_DEBUG false
+
+#if ZWS_DEBUG
+  #define ZWS_LOG_DEBUG(x) printf x
+#else
+  #define ZWS_LOG_DEBUG(x) (void)0
+#endif
 
 struct _zwssock_t {
 	zactor_t* control_actor;              										//  Control to / from agent
@@ -165,6 +172,7 @@ typedef struct {
 static client_t* zwssock_client_new(agent_t* agent, zframe_t* address) {
 	client_t* self = (client_t *)zmalloc(sizeof(client_t));
 	assert(self);
+	ZWS_LOG_DEBUG(("Creating new client for socket [%s] (%s)\n", zframe_strhex(address), zsock_endpoint(agent->stream)));
 	self->agent = agent;
 	self->address = zframe_dup(address);
 	self->hashkey = zframe_strhex(address);
@@ -193,6 +201,8 @@ static void zwssock_client_destroy(client_t** self_p) {
 	assert(self_p);
 	if (*self_p) {
 		client_t* self = *self_p;
+		ZWS_LOG_DEBUG(("Destroying client [%s]\n", self->hashkey));
+	
 		zframe_destroy(&self->address);
 
 		if (self->decoder != NULL) {
@@ -220,7 +230,7 @@ static void zwssock_client_destroy(client_t** self_p) {
 #define CHUNK 8192
 
 /**
- * Parse messages received from client
+ * Parse messages received from client, send them as ZMessages to the Server
  *
  * A single request from the JSMQ client is comprised of multiple messages, one for each frame.
  * Each message must be decompressed if the client supplied a decompression factor during handshake.
@@ -230,7 +240,7 @@ void zwssock_router_message_received(void* tag, byte* payload, int length) {
 	client_t* self = (client_t *)tag;
 	bool message_continued;
 
-	// Create outgoing message; lead with client ID
+	// Create outgoing message (to ZMQ); lead with client ID
 	if (self->outgoing_msg == NULL) {
 		self->outgoing_msg = zmsg_new();
 		zmsg_addstr(self->outgoing_msg, self->hashkey);
@@ -308,17 +318,62 @@ void zwssock_router_message_received(void* tag, byte* payload, int length) {
 }
 
 /**
- *
+ * Send a websocket close frame
 */
-void close_received(void* tag, byte* payload, int length) {
-	client_t* self = (client_t *)tag;
+void send_empty_frame(void* tag) {
+	client_t* self = (client_t*)tag;
 	zframe_t* address = zframe_dup(self->address);
-	zframe_send(&address, self->agent->stream, ZFRAME_MORE);
 	zframe_t* empty = zframe_new_empty();
+
+	zframe_send(&address, self->agent->stream, ZFRAME_MORE);
 	zframe_send(&empty, self->agent->stream, 0);
 }
 
+void websocket_close(void* tag) {
+	client_t* self = (client_t *)tag;
+	zframe_t* address = zframe_dup(self->address);
+
+	ZWS_LOG_DEBUG(("Closing WebSocket endpoint [%s] (%s)\n", self->hashkey, zsock_endpoint(self->agent->stream)));
+
+	send_empty_frame(self);
+	self->state = CONNECTION_EXCEPTION;
+}
+
+/**
+ * Callback on WebSocket "close" frame received
+*/
+void websocket_close_received(void* tag, byte* payload, int length) {
+	client_t* self = (client_t*)tag;
+	zframe_t* address = zframe_dup(self->address);
+
+	uint16_t code = 0;
+	char* reason;
+	// First two bytes are a 2 byte unsigned int, code
+	if (length >= 2) {
+		code = payload[1] | (uint16_t)payload[0] << 8;  // Network order; big endian
+		length = length - 2;
+		// Remaining bytes is a UTF-8 encoded string, reason
+		if (length > 2) {
+			reason = malloc(sizeof(char) * (length - 2));
+			memcpy(reason, payload + 2, length - 2);
+		}
+	}
+
+	ZWS_LOG_DEBUG(("WebSocket close frame received from endpoint [%s] (%s)\n", self->hashkey, zsock_endpoint(self->agent->stream)));
+	if (length >= 2)
+		ZWS_LOG_DEBUG((" - code: %u\n", code));
+	if (length > 2)
+		ZWS_LOG_DEBUG((" - reason: \"%s\"\n", reason));
+	
+	websocket_close(tag);
+}
+
+/**
+ * WebSocket "ping" frame received.
+*/
 void ping_received(void* tag, byte* payload, int length) {
+	ZWS_LOG_DEBUG(("Ping received\n"));
+
 	client_t* self = (client_t *)tag;
 
 	byte* pong = (byte*)zmalloc(2 + length);
@@ -333,8 +388,12 @@ void ping_received(void* tag, byte* payload, int length) {
 	free(pong);
 }
 
+/**
+ * WebSocket "pong" frame received.
+*/
 void pong_received(void* tag, byte* payload, int length) {
 	// TOOD: implement pong
+	ZWS_LOG_DEBUG(("Pong received\n"));
 }
 
 /**
@@ -351,7 +410,7 @@ static void not_acceptable(zframe_t *_address, void* dest) {
 }
 
 /**
- *
+ * Read data from WebSocket endpoint client
 */
 static void client_data_read(client_t* self) {
 	zframe_t* data;
@@ -361,8 +420,13 @@ static void client_data_read(client_t* self) {
 
 	switch (self->state) {
 		case CONNECTION_CLOSED:
-			// TODO: We might not have received the entire request, make the zwshandshake able to handle multiple inputs
+			// When a connection is established, a zero-length frame will be received by the application
+			if (zframe_size(data) == 0) {
+				ZWS_LOG_DEBUG(("Client [%s] (%s) establishing connection...\n", self->hashkey, zsock_endpoint(self->agent->stream)));
+				break;
+			}
 
+			// TODO: We might not have received the entire request, make the zwshandshake able to handle multiple inputs
 			handshake = zwshandshake_new();
 			if (zwshandshake_parse_request(handshake, data)) {
 				// request is valid, getting the response
@@ -378,45 +442,56 @@ static void client_data_read(client_t* self) {
 					if (self->client_compression_factor > 0) {
 						int ret = inflateInit2(&self->permessage_deflate_client, -self->client_compression_factor);
 						if (ret != Z_OK) {
+							ZWS_LOG_DEBUG(("EXCEPTION: Could not inflate - RC: %i\n", ret));
 							self->client_compression_factor = 0;
 							self->state = CONNECTION_EXCEPTION;
 							not_acceptable(self->address, self->agent->stream);
 						}
-
-						ret = deflateInit2(&self->permessage_deflate_server, Z_DEFAULT_COMPRESSION, Z_DEFLATED, -self->server_compression_factor, 8, Z_DEFAULT_STRATEGY);
+					}
+					if (self->server_compression_factor > 0) {
+						int ret = deflateInit2(&self->permessage_deflate_server, Z_DEFAULT_COMPRESSION, Z_DEFLATED, -self->server_compression_factor, 8, Z_DEFAULT_STRATEGY);
 						if (ret != Z_OK) {
+							ZWS_LOG_DEBUG(("EXCEPTION: Could not deflate - RC: %i\n", ret));
 							self->server_compression_factor = 0;
 							self->state = CONNECTION_EXCEPTION;
 							not_acceptable(self->address, self->agent->stream);
 						}
 					}
 
-					self->decoder = zwsdecoder_new(self, &zwssock_router_message_received, &close_received, &ping_received, &pong_received);
+					self->decoder = zwsdecoder_new(self, &zwssock_router_message_received, &websocket_close_received, &ping_received, &pong_received);
+					ZWS_LOG_DEBUG((" - Handshake successful -- client connected\n"));
 					self->state = CONNECTION_CONNECTED;
 
 				// The request is invalid
 				} else {
+					ZWS_LOG_DEBUG(("EXCEPTION: Invalid request: could not get response from handshake\n"));
 					self->state = CONNECTION_EXCEPTION;
 					not_acceptable(self->address, self->agent->stream);
 				}
-			}
-			else {
+			} else {
 				// request is invalid
+				ZWS_LOG_DEBUG(("EXCEPTION: Invalid request - handshake could not be parsed\n"));
 				self->state = CONNECTION_EXCEPTION;
 			}
 			zwshandshake_destroy(&handshake);
 			break;
 
 		case CONNECTION_CONNECTED:;
+			if (zframe_size(data) == 0) {
+				ZWS_LOG_DEBUG(("Client [%s] (%s) sent empty frame; closing connection...\n", self->hashkey, zsock_endpoint(self->agent->stream)));
+				self->state = CONNECTION_EXCEPTION;
+				break;
+			}
 			zwsdecoder_process_buffer(self->decoder, data);
 
 			if (zwsdecoder_is_errored(self->decoder)) {
+				ZWS_LOG_DEBUG(("EXCEPTION: Decoder encountered an error\n"));
 				self->state = CONNECTION_EXCEPTION;
 			}
 			break;
 
 		case CONNECTION_EXCEPTION:
-			// printf("A client connection exception occurred\n");  // DEBUG
+			ZWS_LOG_DEBUG(("Client [%s] exception...\n", self->hashkey));
 			// Ignore the message
 			break;
 	}
@@ -466,7 +541,7 @@ static int s_agent_handle_control(agent_t* self) {
 }
 
 /**
- * Handle messages from the server
+ * Handle messages from the socket
 */
 static int s_agent_handle_router(agent_t* self) {
 	zframe_t* address = zframe_recv(self->stream);
@@ -478,14 +553,15 @@ static int s_agent_handle_router(agent_t* self) {
 		zhash_insert(self->clients, hashkey, client);
 		zhash_freefn(self->clients, hashkey, client_free);
 	}
-	free(hashkey);
-	zframe_destroy(&address);
 
 	client_data_read(client);
 
 	//  If client is misbehaving, remove it
-	if (client->state == CONNECTION_EXCEPTION)
+	if (client->state == CONNECTION_EXCEPTION) {
 		zhash_delete(self->clients, client->hashkey);
+	}
+	zframe_destroy(&address);
+	free(hashkey);
 
 	return 0;
 }
