@@ -4,6 +4,12 @@
 #include "zwshandshake.h"
 
 
+#if ZWS_DEBUG
+  #define ZWS_LOG_DEBUG(x) printf x
+#else
+  #define ZWS_LOG_DEBUG(x) (void)0
+#endif
+
 typedef enum {
 	initial = 0,
 	request_line_G,
@@ -264,6 +270,7 @@ bool zwshandshake_parse_request(zwshandshake_t* self, zframe_t* data) {
 			if (c == '\n')
 			{
 				self->state = complete;
+				// ZWS_LOG_DEBUG(("Handshake: %s\n", request));
 				free(request);
 				return zwshandshake_validate(self);
 			}
@@ -383,7 +390,7 @@ zframe_t* zwshandshake_get_response(zwshandshake_t* self, unsigned char* client_
 
 				} else {
 					extension_client_compression_factor = false;
-					*client_compression_factor = 0;
+					*client_compression_factor = 15;
 				}
 			} else {
 				*client_compression_factor = 15;
